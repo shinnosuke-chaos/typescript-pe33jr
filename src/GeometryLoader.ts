@@ -6,7 +6,7 @@ export default class GeometryLoader {
     // select file from local
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".stl;.off;.obj";
+    input.accept = ".stl";
     return new Promise((resolve, reject) => {
       input.onchange = (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];

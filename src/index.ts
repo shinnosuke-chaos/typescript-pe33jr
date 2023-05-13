@@ -1,35 +1,27 @@
-// Import stylesheets
-import BaseViewer from "./BaseViewer";
-import GeometryLoader from "./Loader";
-import Viewer from "./Viewer";
-import Viewer2 from "./Viewer2";
+import GeometryLoader from "./GeometryLoader";
+import CustomViewer from "./CustomViewer";
+
+customElements.define("custom-viewer", CustomViewer);
 
 // Write TypeScript code!
 const appDiv: HTMLElement = document.getElementById("app");
-let viewer: Viewer | Viewer2 = new Viewer();
+const viewer: CustomViewer = document.querySelector("custom-viewer");
 
+console.log(viewer);
 const clickListeners = {
   "switch-view": () => {
-    const isViewer = viewer instanceof Viewer;
-    viewer.dispose();
-    if (isViewer) {
-      viewer = new Viewer2();
+    if (viewer.view === "top") {
+      viewer.setAttribute("view", "front");
     } else {
-      viewer = new Viewer();
+      viewer.setAttribute("view", "top");
     }
   },
   "load-stl": async () => {
     const geometry = await GeometryLoader.selectFromFile();
-    const isViewer = viewer instanceof Viewer;
-    if (isViewer) {
-      viewer.replaceGeometry(geometry);
-    }
+    viewer.replaceGeometry(geometry);
   },
   "upside-down": () => {
-    const isViewer = viewer instanceof BaseViewer;
-    if (isViewer) {
-      viewer.transform(Math.PI / 2);
-    }
+    viewer.rotateAroundY(Math.PI / 2);
   },
 };
 

@@ -16,10 +16,14 @@ import {
   WebGLRenderer,
 } from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
-import GeometryLoader from "./Loader";
+import GeometryLoader from "./src/GeometryLoader";
 
 export type ViewerOptions = Partial<{
-  camera: { position: Vector3; up: Vector3; lookAt: Vector3 };
+  camera: {
+    position: Vector3;
+    up: Vector3;
+    lookAt: Vector3;
+  };
 }>;
 
 export const defaultViewerOptions: ViewerOptions = {
@@ -31,6 +35,7 @@ export const defaultViewerOptions: ViewerOptions = {
 };
 
 export default class BaseViewer {
+  view: "top" | "front" = "front";
   theta = 0;
   scene = new Scene();
   camera = new OrthographicCamera(
@@ -99,7 +104,12 @@ export default class BaseViewer {
     this.camera.right = maxRange * 2;
     this.camera.top = maxRange * 2;
     this.camera.bottom = -maxRange * 2;
-    this.camera.position.setX(maxRange);
+    if (this.view === "top") {
+      this.camera.position.setZ(maxRange);
+    }
+    if (this.view === "front") {
+      this.camera.position.setX(maxRange);
+    }
     this.camera.updateProjectionMatrix();
   }
   dispose() {
