@@ -2,9 +2,20 @@
   "name": "typescript",
   "version": "0.0.0",
   "private": true,
+  "main": "index.ts",
   "dependencies": {
     "@types/three": "^0.152.0",
     "three": "^0.152.2"
   },
-  "type": "module"
+  "scripts": {
+    "start": "http-server . --cors -o",
+    "watch": "webpack --watch"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "ts-loader": "^9.4.2",
+    "typescript": "^5.0.4",
+    "webpack": "^5.82.1",
+    "webpack-cli": "^5.1.1"
+  }
 }
