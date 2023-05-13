@@ -1,4 +1,4 @@
-import { BufferGeometry } from 'three';
+import { BufferAttribute, BufferGeometry } from 'three';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 
 export default class GeometryLoader {
@@ -29,5 +29,23 @@ export default class GeometryLoader {
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
     });
+  }
+
+  static createBoxBufferGeometry() {
+    const geometry = new BufferGeometry();
+    // Create the vertices for the box.
+    const vertices = [
+      -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, 1,
+      -1, 1, 1,
+    ];
+    // Create the indices for the box.
+    const indices = [
+      0, 1, 3, 2, 2, 3, 7, 6, 6, 7, 5, 4, 4, 5, 1, 0, 0, 2, 6, 4, 1, 5, 7, 3,
+    ];
+    // Set the position attribute of the buffer geometry.
+    geometry.setAttribute('position', new BufferAttribute(vertices, 3));
+    // Set the index attribute of the buffer geometry.
+    geometry.setAttribute('index', new BufferAttribute(indices, 1));
+    return geometry;
   }
 }
