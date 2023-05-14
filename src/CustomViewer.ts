@@ -15,13 +15,18 @@ import {
   Quaternion,
   BufferGeometry,
   BoxGeometry,
+  Vector2,
+  Raycaster,
+  SphereGeometry,
 } from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import GeometryLoader from "./GeometryLoader";
 
 export default class CustomViewer extends HTMLElement {
   view: "top" | "front" = "front";
   theta = 0;
+  scale = 1;
   scene = new Scene();
   camera = new OrthographicCamera(
     -innerWidth / 200,
@@ -36,26 +41,33 @@ export default class CustomViewer extends HTMLElement {
     this.camera,
     this.renderer.domElement
   );
-  
-  // geometry = GeometryLoader.createBoxBufferGeometry();
+  orbitControl: OrbitControls = new OrbitControls(
+    this.camera,
+    this.renderer.domElement
+  );
   geometry = new BoxGeometry(2, 2, 2);
   material = new MeshNormalMaterial();
   container = new Object3D();
   mesh = new Mesh(this.geometry, this.material);
   axisHelper = new AxesHelper(5);
+  flatHelper = new Object3D();
+  pointerMesh: Mesh;
+  raycaster: Raycaster = new Raycaster();
   timer;
-  plane = new PlaneHelper(new Plane(new Vector3(0, 0, 1), 0), 1, 0xffff00);
+  plane = new PlaneHelper(new Plane(new Vector3(0, 0, 1), 0), 5, 0xffff00);
 
   constructor() {
     super();
     console.log("construct");
     this.scene.background = new Color(0xf0f0f0);
+    this.updateOrbitControl();
     this.updateCamera();
     this.container.add(this.mesh);
     this.scene.add(
       this.camera,
       this.container,
       this.axisHelper,
+      this.flatHelper,
       this.control,
       this.plane
     );
@@ -80,8 +92,10 @@ export default class CustomViewer extends HTMLElement {
     console.log("connected");
     this.renderer.setAnimationLoop(this.render.bind(this));
     window.addEventListener("resize", this.resizeListener, false);
-    this.addEventListener("keydown", this.onkeydownListener);
-    this.addEventListener("wheel", this.onwheelListener);
+    this.addEventListener("pointermove", this.onPointerMoveListener);
+    this.addEventListener("click", this.onClickListener);
+    document.addEventListener("keydown", this.onkeydownListener);
+    document.addEventListener("wheel", this.onwheelListener);
     this.liftZAndCenterXY();
   }
   disconnectedCallback() {
@@ -96,15 +110,76 @@ export default class CustomViewer extends HTMLElement {
     this.scene.children = [];
     this.scene = null;
     document.body.removeChild(this.renderer.domElement);
+    this.removeEventListener("pointermove", this.onPointerMoveListener);
+    this.removeEventListener("click", this.onClickListener);
     window.removeEventListener("resize", this.resizeListener);
-    this.removeEventListener("keydown", this.onkeydownListener);
-    this.removeEventListener("wheel", this.onwheelListener);
+    document.removeEventListener("keydown", this.onkeydownListener);
+    document.removeEventListener("wheel", this.onwheelListener);
     this.renderer.domElement;
     this.renderer.dispose();
     this.renderer = null;
   }
+  onClickListener = (event) => {
+    console.log("pointer click", event.altKey);
+    if (event.altKey && this.pointerMesh) {
+      this.pointerMesh.userData.confirmed = !!!this.pointerMesh.userData.confirmed;
+    }
+    if (
+      this.flatHelper.children.filter((point) => point.userData.confirmed)
+        .length === 3
+    ) {
+      this.flatMesh();
+    }
+  };
+  onPointerMoveListener = (event) => {
+    // calculate pointer position in normalized device coordinates
+    // (-1 to +1) for both components
+    for (const pointer of this.flatHelper.children) {
+      if (!pointer.userData.confirmed) {
+        this.flatHelper.remove(pointer);
+      }
+    }
+    const x = (event.clientX / innerWidth) * 2 - 1;
+    const y = -(event.clientY / innerHeight) * 2 + 1;
+    this.raycaster.setFromCamera(new Vector2(x, y), this.camera);
+    {
+      const intersects = this.raycaster.intersectObjects(
+        this.flatHelper.children
+      );
+      if (intersects.length) {
+        // interected point position
+        this.pointerMesh = intersects[0].object as Mesh;
+        return;
+      }
+    }
+    {
+      const intersects = this.raycaster.intersectObjects(
+        this.container.children
+      );
+      if (intersects.length) {
+        // interected point position
+        const point = intersects[0].point;
+        const mesh = new Mesh(
+          new SphereGeometry(this.scale * 0.1),
+          new MeshNormalMaterial()
+        );
+        mesh.position.set(point.x, point.y, point.z);
+        this.flatHelper.add(mesh);
+        this.pointerMesh = mesh;
+      } else {
+        this.pointerMesh = undefined;
+      }
+    }
+  };
   onkeydownListener = (event) => {
-    console.log("keydown", ".....");
+    console.log(
+      "keydown",
+      ".....",
+      event.key,
+      event.ctrlKey,
+      event.altKey,
+      event.metaKey
+    );
     let d = 0.1;
     let x = 0,
       y = 0,
@@ -125,8 +200,45 @@ export default class CustomViewer extends HTMLElement {
     }
     this.container.applyMatrix4(new Matrix4().makeTranslation(x, y, z));
   };
+  // ! TODO 这个三点放平不符合预期
+  flatMesh() {
+    console.log("flat mesh with three points");
+    const [p1, p2, p3] = this.flatHelper.children
+      .filter((point) => point.userData.confirmed)
+      .map((point) => new Vector3().copy(point.position));
+    const normal = new Vector3().crossVectors(
+      new Vector3().subVectors(p2, p1),
+      new Vector3().subVectors(p3, p1)
+    );
+    const plane = new Plane().setFromNormalAndCoplanarPoint(normal, p1);
+    const origin = plane.coplanarPoint(new Vector3());
+    const translationMatrix = new Matrix4();
+    const cross = new Vector3()
+      .crossVectors(this.camera.up, normal)
+      .normalize();
+    const rotationMatrxi = new Matrix4().makeRotationAxis(
+      cross,
+      normal.angleTo(this.camera.up)
+    );
+    if (this.view === "top") {
+      translationMatrix.makeTranslation(0, -origin.y, 0);
+    }
+    if (this.view === "front") {
+      translationMatrix.makeTranslation(0, 0, -origin.z);
+    }
+
+    const matrix = new Matrix4().multiplyMatrices(
+      translationMatrix,
+      rotationMatrxi
+    );
+    this.mesh.applyMatrix4(matrix);
+    this.flatHelper.children.forEach(
+      (point) => (point.userData.confirmed = false)
+    );
+  }
   // wheel event with shift and alt key
   onwheelListener = (event) => {
+    console.log(event.key, event.altKey, event.shiftKey, event.metaKey);
     let dY = event.deltaY;
     if (event.shiftKey) {
       dY /= 10;
@@ -168,7 +280,13 @@ export default class CustomViewer extends HTMLElement {
     }
     this.fitContainerToCamera();
   }
+  updateOrbitControl() {
+    // only dragging is enabled
+    this.orbitControl.enableZoom = false;
+    this.orbitControl.enablePan = false;
+  }
   updateCamera(height = 8) {
+    this.scale = height / 8;
     if (this.view === "top") {
       // top view
       this.camera.position.set(0, 0, height);
@@ -179,7 +297,8 @@ export default class CustomViewer extends HTMLElement {
       this.camera.position.set(height, 0, 0);
       this.camera.up = new Vector3(0, 0, 1);
     }
-    this.axisHelper.scale.set(height / 8, height / 8, height / 8);
+    this.axisHelper.scale.set(this.scale, this.scale, this.scale);
+    this.plane.size *= this.scale;
     this.camera.lookAt(new Vector3());
     this.camera.updateProjectionMatrix();
   }
