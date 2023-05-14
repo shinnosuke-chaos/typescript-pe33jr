@@ -36,6 +36,7 @@ export default class CustomViewer extends HTMLElement {
     this.camera,
     this.renderer.domElement
   );
+  
   // geometry = GeometryLoader.createBoxBufferGeometry();
   geometry = new BoxGeometry(2, 2, 2);
   material = new MeshNormalMaterial();
@@ -49,17 +50,7 @@ export default class CustomViewer extends HTMLElement {
     super();
     console.log("construct");
     this.scene.background = new Color(0xf0f0f0);
-    if (this.view === "top") {
-      // top view
-      this.camera.position.set(0, 0, 8);
-      this.camera.up = new Vector3(0, 1, 0);
-    }
-    if (this.view === "front") {
-      // front view
-      this.camera.position.set(8, 0, 0);
-      this.camera.up = new Vector3(0, 0, 1);
-    }
-    this.camera.lookAt(new Vector3());
+    this.updateCamera();
     this.container.add(this.mesh);
     this.scene.add(
       this.camera,
@@ -80,7 +71,7 @@ export default class CustomViewer extends HTMLElement {
       case "view":
         console.log(name, newValue);
         this.view = newValue;
-        this.fitContainerToCamera();
+        this.updateCamera();
         break;
     }
   }
@@ -177,24 +168,35 @@ export default class CustomViewer extends HTMLElement {
     }
     this.fitContainerToCamera();
   }
-  fitContainerToCamera() {
-    const box = new Box3().setFromObject(this.container);
-    const { max, min } = box;
-    const maxRange = Math.max(max.x - min.x, max.y - min.y, max.z - min.z);
-    this.camera.left = -maxRange * 2;
-    this.camera.right = maxRange * 2;
-    this.camera.top = maxRange * 2;
-    this.camera.bottom = -maxRange * 2;
+  updateCamera(height = 8) {
     if (this.view === "top") {
-      this.camera.position.set(0, 0, maxRange);
+      // top view
+      this.camera.position.set(0, 0, height);
       this.camera.up = new Vector3(0, 1, 0);
     }
     if (this.view === "front") {
-      this.camera.position.set(maxRange, 0, 0);
+      // front view
+      this.camera.position.set(height, 0, 0);
       this.camera.up = new Vector3(0, 0, 1);
     }
+    this.axisHelper.scale.set(height / 8, height / 8, height / 8);
     this.camera.lookAt(new Vector3());
     this.camera.updateProjectionMatrix();
+  }
+  fitContainerToCamera() {
+    const boundingBox = new Box3().setFromObject(this.container);
+    const center = boundingBox.getCenter(new Vector3());
+    const size = boundingBox.getSize(new Vector3());
+    const maxSize = Math.max(size.x, size.y, size.z);
+    this.camera.zoom = 1;
+    this.camera.left = -(2 * maxSize);
+    this.camera.bottom = -(2 * maxSize);
+    this.camera.top = 2 * maxSize;
+    this.camera.right = 2 * maxSize;
+    this.camera.near = -maxSize * 4;
+    this.camera.far = maxSize * 4;
+    // camera;
+    this.updateCamera(maxSize);
   }
   render() {
     // console.log("render");
