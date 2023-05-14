@@ -1,5 +1,6 @@
-import { BoxGeometry, BufferGeometry } from "three";
+import { BoxGeometry, BufferGeometry, ShapeGeometry, ShapePath } from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
+import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader";
 
 export default class GeometryLoader {
   static selectFromFile(): Promise<BufferGeometry> {
@@ -31,9 +32,30 @@ export default class GeometryLoader {
     });
   }
 
-  // create a buffer geometry  in a box shape with side length is 2
   static createBoxGeometry(sideLength: number = 2) {
     const geometry = new BoxGeometry(sideLength, sideLength, sideLength);
     return geometry;
+  }
+
+  static readSVGToGeommetry(): Promise<ShapeGeometry[]> {
+    const loader = new SVGLoader();
+    return new Promise((resolve, reject) =>
+      loader.load(
+        "teeth.svg",
+        (data) => {
+          resolve(
+            data.paths
+              .map((path) =>
+                SVGLoader.createShapes(path).map(
+                  (shape) => new ShapeGeometry(shape)
+                )
+              )
+              .flat()
+          );
+        },
+        (event) => console.log(event),
+        reject
+      )
+    );
   }
 }

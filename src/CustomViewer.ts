@@ -18,6 +18,9 @@ import {
   Vector2,
   Raycaster,
   SphereGeometry,
+  Group,
+  MeshBasicMaterial,
+  DoubleSide,
 } from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
@@ -45,6 +48,7 @@ export default class CustomViewer extends HTMLElement {
     this.camera,
     this.renderer.domElement
   );
+  // geometry = new BufferGeometry();
   geometry = new BoxGeometry(2, 2, 2);
   material = new MeshNormalMaterial();
   container = new Object3D();
@@ -55,7 +59,8 @@ export default class CustomViewer extends HTMLElement {
   raycaster: Raycaster = new Raycaster();
   timer;
   plane = new PlaneHelper(new Plane(new Vector3(0, 0, 1), 0), 5, 0xffff00);
-
+  teeth: Group = new Group();
+  target = this.container;
   constructor() {
     super();
     console.log("construct");
@@ -69,7 +74,8 @@ export default class CustomViewer extends HTMLElement {
       this.axisHelper,
       this.flatHelper,
       this.control,
-      this.plane
+      this.plane,
+      this.teeth
     );
     this.renderer.setSize(innerWidth, innerHeight);
     this.appendChild(this.renderer.domElement);
@@ -90,6 +96,7 @@ export default class CustomViewer extends HTMLElement {
   // watched properties
   connectedCallback() {
     console.log("connected");
+    this.loadTeethGroup();
     this.renderer.setAnimationLoop(this.render.bind(this));
     window.addEventListener("resize", this.resizeListener, false);
     this.addEventListener("pointermove", this.onPointerMoveListener);
@@ -122,7 +129,8 @@ export default class CustomViewer extends HTMLElement {
   onClickListener = (event) => {
     console.log("pointer click", event.altKey);
     if (event.altKey && this.pointerMesh) {
-      this.pointerMesh.userData.confirmed = !!!this.pointerMesh.userData.confirmed;
+      this.pointerMesh.userData.confirmed =
+        !!!this.pointerMesh.userData.confirmed;
     }
     if (
       this.flatHelper.children.filter((point) => point.userData.confirmed)
@@ -174,16 +182,27 @@ export default class CustomViewer extends HTMLElement {
   onkeydownListener = (event) => {
     console.log(
       "keydown",
-      ".....",
       event.key,
       event.ctrlKey,
       event.altKey,
-      event.metaKey
+      event.metaKey,
+      event.shiftKey
     );
+
+    if (event.shiftKey) {
+      this.target =
+        this.target === this.container ? this.teeth : this.container;
+      return;
+    }
+
     let d = 0.1;
     let x = 0,
       y = 0,
-      z = 0;
+      z = 0,
+      a = 0,
+      s = 0,
+      h = 0;
+
     switch (event.key) {
       case "w":
         y = d;
@@ -197,8 +216,32 @@ export default class CustomViewer extends HTMLElement {
       case "d":
         x = d;
         break;
+      case "q":
+        a = -d;
+        break;
+      case "e":
+        a = d;
+        break;
+      case "r":
+        s = -d;
+        break;
+      case "f":
+        s = d;
+        break;
+      case "t":
+        h = d;
+        break;
+      case "g":
+        h = -d;
+        break;
     }
-    this.container.applyMatrix4(new Matrix4().makeTranslation(x, y, z));
+
+    const matrix = new Matrix4();
+    if (x || y || z) matrix.makeTranslation(x, y, z);
+    if (s) matrix.makeScale(s + 1, s + 1, s + 1);
+    if (a) matrix.makeRotationAxis(new Vector3(0, 0, 1), a);
+    if (h) matrix.makeTranslation(0, 0, h);
+    this.target.applyMatrix4(matrix);
   };
   // ! TODO 这个三点放平不符合预期
   flatMesh() {
@@ -255,6 +298,7 @@ export default class CustomViewer extends HTMLElement {
   resizeListener = () => {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
+    this.fitContainerToCamera();
   };
   rotateAroundY(dy = 0) {
     clearTimeout(this.timer);
@@ -272,6 +316,33 @@ export default class CustomViewer extends HTMLElement {
         new Matrix4().makeTranslation(-center.x, -center.y, -box.min.z)
       );
     }, 1000);
+  }
+  loadTeethGroup() {
+    console.log("load teeth Group");
+    this.teeth.scale.multiplyScalar(0.001 * this.scale);
+    const material = new MeshBasicMaterial({
+      color: new Color().setHex(0x000000),
+      side: DoubleSide,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.25,
+    });
+    GeometryLoader.readSVGToGeommetry().then((shapes) => {
+      this.teeth.clear();
+      console.log("teeth loaded", shapes);
+      for (const shape of shapes) {
+        this.teeth.add(new Mesh(shape, material));
+      }
+      // move teeth to center
+      const box = new Box3().setFromObject(this.teeth);
+      const center = box.getCenter(new Vector3());
+      this.teeth.applyMatrix4(
+        new Matrix4().makeTranslation(-center.x, -center.y, -center.z)
+      );
+      this.teeth.applyMatrix4(
+        new Matrix4().makeRotationAxis(new Vector3(0, 0, 1), Math.PI)
+      );
+    });
   }
   replaceGeometry(geometry: BufferGeometry) {
     if (geometry) {
