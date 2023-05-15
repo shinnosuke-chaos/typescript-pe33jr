@@ -1,7 +1,8 @@
 import GeometryLoader from "./GeometryLoader";
 import CustomViewer from "./CustomViewer";
+import CustomViewer2 from "./CustomViewer2";
 
-customElements.define("custom-viewer", CustomViewer);
+customElements.define("custom-viewer", CustomViewer2);
 
 // Write TypeScript code!
 const appDiv: HTMLElement = document.getElementById("app");
