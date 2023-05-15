@@ -21,6 +21,7 @@ import {
   Group,
   MeshBasicMaterial,
   DoubleSide,
+  CylinderGeometry,
 } from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
@@ -49,7 +50,8 @@ export default class CustomViewer extends HTMLElement {
     this.renderer.domElement
   );
   // geometry = new BufferGeometry();
-  geometry = new BoxGeometry(2, 2, 2);
+  geometry = new CylinderGeometry(1, 2, 2);
+
   material = new MeshNormalMaterial();
   container = new Object3D();
   mesh = new Mesh(this.geometry, this.material);
@@ -243,7 +245,6 @@ export default class CustomViewer extends HTMLElement {
     if (h) matrix.makeTranslation(0, 0, h);
     this.target.applyMatrix4(matrix);
   };
-  // ! TODO 这个三点放平不符合预期
   flatMesh() {
     console.log("flat mesh with three points");
     const [p1, p2, p3] = this.flatHelper.children
@@ -253,15 +254,14 @@ export default class CustomViewer extends HTMLElement {
       new Vector3().subVectors(p2, p1),
       new Vector3().subVectors(p3, p1)
     );
+    const axis = new Vector3(0, 0, 1);
     const plane = new Plane().setFromNormalAndCoplanarPoint(normal, p1);
     const origin = plane.coplanarPoint(new Vector3());
     const translationMatrix = new Matrix4();
-    const cross = new Vector3()
-      .crossVectors(this.camera.up, normal)
-      .normalize();
-    const rotationMatrxi = new Matrix4().makeRotationAxis(
+    const cross = new Vector3().crossVectors(axis, normal).normalize();
+    const rotationMatrix = new Matrix4().makeRotationAxis(
       cross,
-      normal.angleTo(this.camera.up)
+      normal.angleTo(axis) + Math.PI
     );
     if (this.view === "top") {
       translationMatrix.makeTranslation(0, -origin.y, 0);
@@ -272,12 +272,13 @@ export default class CustomViewer extends HTMLElement {
 
     const matrix = new Matrix4().multiplyMatrices(
       translationMatrix,
-      rotationMatrxi
+      rotationMatrix
     );
     this.mesh.applyMatrix4(matrix);
     this.flatHelper.children.forEach(
       (point) => (point.userData.confirmed = false)
     );
+    this.liftZAndCenterXY(true);
   }
   // wheel event with shift and alt key
   onwheelListener = (event) => {
@@ -307,15 +308,18 @@ export default class CustomViewer extends HTMLElement {
     const q1 = new Quaternion().setFromAxisAngle(v, dy);
     this.mesh.applyQuaternion(q1);
   }
-  liftZAndCenterXY() {
+  liftZAndCenterXY(immediate = false) {
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => {
-      const box = new Box3().setFromObject(this.mesh);
-      const center = box.getCenter(new Vector3());
-      this.mesh.applyMatrix4(
-        new Matrix4().makeTranslation(-center.x, -center.y, -box.min.z)
-      );
-    }, 1000);
+    this.timer = setTimeout(
+      () => {
+        const box = new Box3().setFromObject(this.mesh);
+        const center = box.getCenter(new Vector3());
+        this.mesh.applyMatrix4(
+          new Matrix4().makeTranslation(-center.x, -center.y, -box.min.z)
+        );
+      },
+      immediate ? 0 : 1000
+    );
   }
   loadTeethGroup() {
     console.log("load teeth Group");
