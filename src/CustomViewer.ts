@@ -154,6 +154,7 @@ export default class CustomViewer extends HTMLElement {
           } else {
             this.pointerMesh.userData.previousTarget = this.target;
             this.target = this.pointerMesh;
+            // TODO intersect container get z
           }
           return;
         }
@@ -170,6 +171,7 @@ export default class CustomViewer extends HTMLElement {
           existPoint.position.copy(this.pointerMesh.position);
           existPoint.userData.previousTarget = this.target;
           this.target = existPoint;
+          // TODO intersect container get z
           return;
         }
       }
@@ -190,6 +192,9 @@ export default class CustomViewer extends HTMLElement {
   onPointerMoveListener = (event) => {
     // 回收所有未固定的flat点
     for (const pointer of this.flatHelper.children) {
+      if (this.pointerMesh === pointer) {
+        continue;
+      }
       if (!pointer.userData.confirmed) {
         this.flatHelper.remove(pointer);
         pointer["geometry"].dispose();
@@ -198,6 +203,9 @@ export default class CustomViewer extends HTMLElement {
     }
     // 回收所有未固定的teeth点
     for (const pointer of this.teethHelper.children) {
+      if (this.pointerMesh === pointer) {
+        continue;
+      }
       if (!pointer.userData.confirmed) {
         this.teethHelper.remove(pointer);
         pointer["geometry"].dispose();
@@ -230,20 +238,32 @@ export default class CustomViewer extends HTMLElement {
         return;
       }
     }
-    // 清空当前悬停点
-    this.pointerMesh = undefined;
-    // 悬停在teeth上,设置当前选定点牙位UUID
+
+    // 悬停在teeth上,设置当前选定点牙位UUID和牙位的Size(z===0)
     {
       const intersects = this.raycaster.intersectObjects(this.teeth.children);
       if (intersects.length) {
         // intersected point position
         const point = intersects[0].point;
+        const object = intersects[0].object;
+        // 同一牙位,未固定的前置悬停点存在,则仅改变位置,不重新渲染
+        if (
+          this.pointerMesh &&
+          this.pointerMesh.userData?.objectUuid === object.uuid &&
+          !this.pointerMesh?.userData?.confirmed
+        ) {
+          this.pointerMesh.position.copy(point);
+          return;
+        }
         const mesh = new Mesh(
           new SphereGeometry(this.scale * 0.1),
           new MeshNormalMaterial()
         );
         mesh.position.set(point.x, point.y, point.z);
-        mesh.userData.objectUuid = intersects[0].object.uuid;
+        mesh.userData.size = new Box3()
+          .setFromObject(object)
+          .getSize(new Vector3());
+        mesh.userData.objectUuid = object.uuid;
         this.teethHelper.add(mesh);
         this.pointerMesh = mesh;
         return;
@@ -257,6 +277,16 @@ export default class CustomViewer extends HTMLElement {
       if (intersects.length) {
         // intersected point position
         const point = intersects[0].point;
+
+        // 非牙位上的未固定的前置悬停点存在,则仅改变位置,不重新渲染
+        if (
+          this.pointerMesh &&
+          !this.pointerMesh?.userData?.objectUuid &&
+          !this.pointerMesh?.userData?.confirmed
+        ) {
+          this.pointerMesh.position.copy(point);
+          return;
+        }
         const mesh = new Mesh(
           new SphereGeometry(this.scale * 0.1),
           new MeshNormalMaterial()
@@ -267,6 +297,8 @@ export default class CustomViewer extends HTMLElement {
         return;
       }
     }
+    // 不存在悬停点 清空当前悬停点
+    this.pointerMesh = undefined;
   };
   onkeydownListener = (event) => {
     console.log(
@@ -331,7 +363,41 @@ export default class CustomViewer extends HTMLElement {
     if (a) matrix.makeRotationAxis(new Vector3(0, 0, 1), a);
     if (h) matrix.makeTranslation(0, 0, h);
     this.target.applyMatrix4(matrix);
+
+    // matrix only affect x and y axis
+    if (this.target.userData.previousTarget) {
+      const isZOnly =
+        matrix.elements[0] === 0 &&
+        matrix.elements[1] === 0 &&
+        matrix.elements[2] !== 0 &&
+        matrix.elements[3] === 0 &&
+        matrix.elements[4] === 0 &&
+        matrix.elements[5] === 0 &&
+        matrix.elements[6] !== 0 &&
+        matrix.elements[7] === 0 &&
+        matrix.elements[8] === 0 &&
+        matrix.elements[9] === 0 &&
+        matrix.elements[10] !== 0 &&
+        matrix.elements[11] === 0 &&
+        matrix.elements[12] === 0 &&
+        matrix.elements[13] === 0 &&
+        matrix.elements[14] === 0 &&
+        matrix.elements[15] === 1;
+      if (!isZOnly) {
+        // TODO intersect container get z
+      }
+    }
   };
+  intersectMeshFromPoint(point: Vector3) {
+    const raycaster = new Raycaster();
+    raycaster.set(point, new Vector3(0, 0, 1));
+    const intersects = raycaster.intersectObjects(this.container.children);
+    if (intersects.length) {
+      const intersect = intersects[0];
+      console.debug(intersect.point);
+      return intersect.point;
+    }
+  }
   flatMesh() {
     console.log("flat mesh with three points");
     const [p1, p2, p3] = this.flatHelper.children
