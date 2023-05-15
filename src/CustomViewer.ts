@@ -22,6 +22,8 @@ import {
   MeshBasicMaterial,
   DoubleSide,
   CylinderGeometry,
+  LineSegments,
+  Line,
 } from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
@@ -57,6 +59,7 @@ export default class CustomViewer extends HTMLElement {
   mesh = new Mesh(this.geometry, this.material);
   axisHelper = new AxesHelper(5);
   flatHelper = new Object3D();
+  teethHelper = new Object3D();
   pointerMesh: Mesh;
   raycaster: Raycaster = new Raycaster();
   timer;
@@ -75,6 +78,7 @@ export default class CustomViewer extends HTMLElement {
       this.container,
       this.axisHelper,
       this.flatHelper,
+      this.teethHelper,
       this.control,
       this.plane,
       this.teeth
@@ -129,45 +133,129 @@ export default class CustomViewer extends HTMLElement {
     this.renderer = null;
   }
   onClickListener = (event) => {
-    console.log("pointer click", event.altKey);
-    if (event.altKey && this.pointerMesh) {
-      this.pointerMesh.userData.confirmed =
-        !!!this.pointerMesh.userData.confirmed;
-    }
-    if (
-      this.flatHelper.children.filter((point) => point.userData.confirmed)
-        .length === 3
-    ) {
-      this.flatMesh();
+    console.log(
+      "pointer click",
+      event.altKey,
+      this.pointerMesh,
+      this.pointerMesh?.userData.objectUuid
+    );
+    // 当前鼠标悬停有目标点
+    if (this.pointerMesh) {
+      // 目标点为teeth上的点,存在objectUuid
+      if (this.pointerMesh.userData.objectUuid) {
+        // 目标点为固定点
+        if (this.pointerMesh.userData.confirmed) {
+          // 事件同时按下altKey,表示取消固定,还原操作对象,
+          if (event.altKey) {
+            this.pointerMesh.userData.confirmed = false;
+            this.target =
+              this.pointerMesh.userData.previousTarget || this.container;
+            //否则保存前置操作对象,选取目标点为(移动旋转放大缩小)操作对象,
+          } else {
+            this.pointerMesh.userData.previousTarget = this.target;
+            this.target = this.pointerMesh;
+          }
+          return;
+        }
+        // 目标点为非固定点,找本区域内是否有已经确定的固定点
+        const existPoint = this.teethHelper.children.find(
+          (point) =>
+            point.userData.objectUuid ===
+              this.pointerMesh.userData.objectUuid && point.userData.confirmed
+        );
+        // 当前区域(牙位)已经存在固定点,则将其位置移到目标点,
+        // 同时保存前置操作对象, 选取目标点为(移动旋转放大缩小)操作对象
+        // 由于此处直接返回,目标点在鼠标悬停事件中会被回收
+        if (existPoint) {
+          existPoint.position.copy(this.pointerMesh.position);
+          existPoint.userData.previousTarget = this.target;
+          this.target = existPoint;
+          return;
+        }
+      }
+      // 目标点为flat上的点,同时按下altKey,则反转固定点的状态
+      if (event.altKey) {
+        this.pointerMesh.userData.confirmed =
+          !!!this.pointerMesh.userData.confirmed;
+      }
+      // 如果flat上的点达到3个,则方平目标
+      if (
+        this.flatHelper.children.filter((point) => point.userData.confirmed)
+          .length === 3
+      ) {
+        this.flatMesh();
+      }
     }
   };
   onPointerMoveListener = (event) => {
-    // calculate pointer position in normalized device coordinates
-    // (-1 to +1) for both components
+    // 回收所有未固定的flat点
     for (const pointer of this.flatHelper.children) {
       if (!pointer.userData.confirmed) {
         this.flatHelper.remove(pointer);
+        pointer["geometry"].dispose();
+        pointer["material"].dispose();
+      }
+    }
+    // 回收所有未固定的teeth点
+    for (const pointer of this.teethHelper.children) {
+      if (!pointer.userData.confirmed) {
+        this.teethHelper.remove(pointer);
+        pointer["geometry"].dispose();
+        pointer["material"].dispose();
       }
     }
     const x = (event.clientX / innerWidth) * 2 - 1;
     const y = -(event.clientY / innerHeight) * 2 + 1;
     this.raycaster.setFromCamera(new Vector2(x, y), this.camera);
+    // 以下四个相交存在优先级,满足一个则直接返回
+    // 当前鼠标悬停是否在teeth点上
+    {
+      const intersects = this.raycaster.intersectObjects(
+        this.teethHelper.children
+      );
+      if (intersects.length) {
+        // intersected point position
+        this.pointerMesh = intersects[0].object as Mesh;
+        return;
+      }
+    }
+    //  当前鼠标悬停是否在flat点上
     {
       const intersects = this.raycaster.intersectObjects(
         this.flatHelper.children
       );
       if (intersects.length) {
-        // interected point position
+        // intersected point position
         this.pointerMesh = intersects[0].object as Mesh;
         return;
       }
     }
+    // 清空当前悬停点
+    this.pointerMesh = undefined;
+    // 悬停在teeth上,设置当前选定点牙位UUID
+    {
+      const intersects = this.raycaster.intersectObjects(this.teeth.children);
+      if (intersects.length) {
+        // intersected point position
+        const point = intersects[0].point;
+        const mesh = new Mesh(
+          new SphereGeometry(this.scale * 0.1),
+          new MeshNormalMaterial()
+        );
+        mesh.position.set(point.x, point.y, point.z);
+        mesh.userData.objectUuid = intersects[0].object.uuid;
+        this.teethHelper.add(mesh);
+        this.pointerMesh = mesh;
+        return;
+      }
+    }
+    // 悬停在flat上
     {
       const intersects = this.raycaster.intersectObjects(
         this.container.children
       );
       if (intersects.length) {
-        // interected point position
+        // intersected point position
         const point = intersects[0].point;
         const mesh = new Mesh(
           new SphereGeometry(this.scale * 0.1),
@@ -176,8 +264,7 @@ export default class CustomViewer extends HTMLElement {
         mesh.position.set(point.x, point.y, point.z);
         this.flatHelper.add(mesh);
         this.pointerMesh = mesh;
-      } else {
-        this.pointerMesh = undefined;
+        return;
       }
     }
   };
@@ -325,13 +412,13 @@ export default class CustomViewer extends HTMLElement {
     console.log("load teeth Group");
     this.teeth.scale.multiplyScalar(0.001 * this.scale);
     const material = new MeshBasicMaterial({
-      color: new Color().setHex(0x000000),
+      color: new Color().setHex(0x0f0f0f),
       side: DoubleSide,
       transparent: true,
       depthWrite: false,
-      opacity: 0.25,
+      opacity: 0.5,
     });
-    GeometryLoader.readSVGToGeommetry().then((shapes) => {
+    GeometryLoader.readSVGToGeometry().then((shapes) => {
       this.teeth.clear();
       console.log("teeth loaded", shapes);
       for (const shape of shapes) {

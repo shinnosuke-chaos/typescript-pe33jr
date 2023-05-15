@@ -37,7 +37,7 @@ export default class GeometryLoader {
     return geometry;
   }
 
-  static readSVGToGeommetry(): Promise<ShapeGeometry[]> {
+  static readSVGToGeometry(): Promise<ShapeGeometry[]> {
     const loader = new SVGLoader();
     return new Promise((resolve, reject) =>
       loader.load(
