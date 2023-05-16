@@ -1,37 +1,41 @@
 import {
-  Scene,
-  OrthographicCamera,
-  WebGLRenderer,
+  AxesHelper,
+  Box3,
+  Box3Helper,
+  BoxGeometry,
+  BoxHelper,
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  CylinderGeometry,
+  DoubleSide,
+  Group,
+  Line,
+  LineSegments,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
   MeshNormalMaterial,
   Object3D,
-  Mesh,
-  AxesHelper,
-  PlaneHelper,
+  OrthographicCamera,
   Plane,
-  Vector3,
-  Color,
-  Box3,
-  Matrix4,
+  PlaneHelper,
   Quaternion,
-  BufferGeometry,
-  BoxGeometry,
-  Vector2,
   Raycaster,
+  Scene,
+  ShapeGeometry,
   SphereGeometry,
-  Group,
-  MeshBasicMaterial,
-  DoubleSide,
-  CylinderGeometry,
-  LineSegments,
-  Line,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
 } from "three";
-import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import GeometryLoader from "./GeometryLoader";
 
 export default class CustomViewer extends HTMLElement {
   view: "top" | "front" = "front";
-  scale = 1;
+  pointerScale = 0.1;
   scene = new Scene();
   camera = new OrthographicCamera(
     -innerWidth / 200,
@@ -62,20 +66,27 @@ export default class CustomViewer extends HTMLElement {
   timer;
   plane = new PlaneHelper(new Plane(new Vector3(0, 0, 1), 0), 5, 0xffff00);
   teeth: Group = new Group();
-  target: any = this.mesh;
+  private _target: any = this.mesh;
+  public get target(): any {
+    return this._target;
+  }
+  public set target(value: any) {
+    this._target = value;
+  }
+  frameBox = new Box3Helper(new Box3(), new Color(0xff0000));
   constructor() {
     super();
     console.log("construct");
     this.scene.background = new Color(0xf0f0f0);
     this.updateOrbitControl();
-    this.updateCamera();
     this.scene.add(
       this.camera,
       this.mesh,
       this.axisHelper,
       this.control,
       this.plane,
-      this.teeth
+      this.teeth,
+      this.frameBox
     );
     this.renderer.setSize(innerWidth, innerHeight);
     this.appendChild(this.renderer.domElement);
@@ -89,21 +100,21 @@ export default class CustomViewer extends HTMLElement {
       case "view":
         console.log(name, newValue);
         this.view = newValue;
-        this.updateCamera();
+        this.fitContainerToCamera();
         break;
     }
   }
   // watched properties
   connectedCallback() {
     console.log("connected");
-    this.loadTeethGroup();
+    this.liftZAndCenterXY(true);
     this.renderer.setAnimationLoop(this.render.bind(this));
     window.addEventListener("resize", this.resizeListener, false);
     this.addEventListener("pointermove", this.onPointerMoveListener);
     this.addEventListener("click", this.onClickListener);
     document.addEventListener("keydown", this.onkeydownListener);
     document.addEventListener("wheel", this.onwheelListener);
-    this.liftZAndCenterXY();
+    this.loadTeethGroup();
   }
   disconnectedCallback() {
     console.log("disconnected");
@@ -252,7 +263,8 @@ export default class CustomViewer extends HTMLElement {
           return;
         }
         const mesh = new Mesh(
-          new SphereGeometry(this.scale * 0.1),
+          // TODO point radius
+          new SphereGeometry(this.pointerScale),
           new MeshNormalMaterial()
         );
         mesh.position.set(point.x, point.y, point.z);
@@ -280,7 +292,8 @@ export default class CustomViewer extends HTMLElement {
           return;
         }
         const mesh = new Mesh(
-          new SphereGeometry(this.scale * 0.1),
+          // TODO point radius
+          new SphereGeometry(this.pointerScale),
           new MeshNormalMaterial()
         );
         mesh.position.set(point.x, point.y, point.z);
@@ -353,7 +366,18 @@ export default class CustomViewer extends HTMLElement {
     const matrix = new Matrix4();
     if (x || y || z) matrix.makeTranslation(x, y, z);
     if (s) matrix.makeScale(s + 1, s + 1, s + 1);
-    if (a) matrix.makeRotationAxis(new Vector3(0, 0, 1), a);
+    if (a) {
+      console.debug("position", this.target.position);
+      const pos = new Vector3().copy(this.target.position);
+      const translation1 = new Matrix4().makeTranslation(
+        -pos.x,
+        -pos.y,
+        -pos.z
+      );
+      const rotation = new Matrix4().makeRotationZ(a);
+      const translation2 = new Matrix4().makeTranslation(pos.x, pos.y, pos.z);
+      matrix.multiplyMatrices(translation2, rotation).multiply(translation1);
+    }
     if (h) matrix.makeTranslation(0, 0, h);
     this.target.applyMatrix4(matrix);
 
@@ -414,24 +438,19 @@ export default class CustomViewer extends HTMLElement {
       new Vector3().subVectors(p3, p1)
     );
     const axis = new Vector3(0, 0, 1);
-    const plane = new Plane().setFromNormalAndCoplanarPoint(normal, p1);
-    const origin = plane.coplanarPoint(new Vector3());
-    const translationMatrix = new Matrix4();
-    const cross = new Vector3().crossVectors(axis, normal).normalize();
-    const rotationMatrix = new Matrix4().makeRotationAxis(
-      cross,
-      normal.angleTo(axis) + Math.PI
-    );
-    if (this.view === "top") {
-      translationMatrix.makeTranslation(0, -origin.y, 0);
-    }
-    if (this.view === "front") {
-      translationMatrix.makeTranslation(0, 0, -origin.z);
-    }
+    const origin = new Plane()
+      .setFromNormalAndCoplanarPoint(normal, p1)
+      .coplanarPoint(new Vector3());
 
     const matrix = new Matrix4().multiplyMatrices(
-      translationMatrix,
-      rotationMatrix
+      // center plane translation
+      new Matrix4().makeTranslation(-origin.x, -origin.y, -origin.z),
+      new Matrix4().makeRotationFromQuaternion(
+        new Quaternion().setFromAxisAngle(
+          new Vector3().crossVectors(axis, normal).normalize(),
+          normal.angleTo(axis)
+        )
+      )
     );
     this.mesh.applyMatrix4(matrix);
     this.liftZAndCenterXY(true);
@@ -478,8 +497,6 @@ export default class CustomViewer extends HTMLElement {
     );
   }
   loadTeethGroup() {
-    console.log("load teeth Group");
-    this.teeth.scale.multiplyScalar(0.001 * this.scale);
     const material = new MeshBasicMaterial({
       color: new Color().setHex(0x0f0f0f),
       side: DoubleSide,
@@ -488,20 +505,33 @@ export default class CustomViewer extends HTMLElement {
       opacity: 0.5,
     });
     GeometryLoader.readSVGToGeometry().then((shapes) => {
+      // 载入前对teeth进行清空 并还原缩放比例
       this.teeth.clear();
-      console.log("teeth loaded", shapes);
+      this.teeth.scale.set(1, 1, 1);
+      console.log("teeth loaded", shapes.length);
       for (const shape of shapes) {
         this.teeth.add(new Mesh(shape, material));
       }
-      // move teeth to center
-      const box = new Box3().setFromObject(this.teeth);
-      const center = box.getCenter(new Vector3());
-      this.teeth.applyMatrix4(
-        new Matrix4().makeTranslation(-center.x, -center.y, -center.z)
+      // 获取teeth group的center,此步骤之前 一定不也能对teeth进行缩放
+      const center = new Box3()
+        .setFromObject(this.teeth)
+        .getCenter(new Vector3());
+      console.debug("center", center);
+      // 对各个shape 相对于 teeth 进行center
+      for (const shape of this.teeth.children) {
+        shape["geometry"].translate(-center.x, -center.y, 0);
+        shape.updateMatrixWorld(true);
+      }
+      // 此时针对teeth的位置进行旋转和缩放,可选,根据具体的svg而定
+      this.teeth.applyMatrix4(new Matrix4().makeRotationZ(Math.PI));
+      this.teeth.userData.size = new Box3()
+        .setFromObject(this.teeth)
+        .getSize(new Vector3());
+      console.debug(
+        new Box3().setFromObject(this.teeth).getSize(new Vector3())
       );
-      this.teeth.applyMatrix4(
-        new Matrix4().makeRotationAxis(new Vector3(0, 0, 1), Math.PI)
-      );
+
+      this.fitContainerToCamera();
     });
   }
   replaceGeometry(geometry: BufferGeometry) {
@@ -511,30 +541,38 @@ export default class CustomViewer extends HTMLElement {
     }
     this.fitContainerToCamera();
   }
+  updateFrameBox() {
+    this.frameBox.box.setFromObject(this.target);
+  }
   updateOrbitControl() {
     // only dragging is enabled
     this.orbitControl.enableZoom = false;
     this.orbitControl.enablePan = false;
   }
-  updateCamera(height = 8) {
-    this.scale = height / 8;
-    if (this.view === "top") {
-      // top view
-      this.camera.position.set(0, 0, height);
-      this.camera.up = new Vector3(0, 1, 0);
-    }
-    if (this.view === "front") {
-      // front view
-      this.camera.position.set(height, 0, 0);
-      this.camera.up = new Vector3(0, 0, 1);
-    }
-    this.axisHelper.scale.set(this.scale, this.scale, this.scale);
-    this.plane.size *= this.scale;
-    this.camera.lookAt(new Vector3());
-    this.camera.updateProjectionMatrix();
+  updateChildOfScene(size = new Vector3(0, 0, 8)) {
+    const maxSize = Math.max(size.x, size.y, size.z);
+    this.axisHelper.scale.set(size.x + 3, size.y + 3, size.z + 3);
+    this.teeth.scale.set(
+      (maxSize / (this.teeth.userData.size?.x || maxSize)) * 1.1,
+      (maxSize / (this.teeth.userData.size?.y || maxSize)) * 1.1,
+      1
+    );
+    this.plane.size = maxSize * 1.2;
+    this.pointerScale = (0.1 * maxSize) / 8;
+    this.scene.children
+      .filter(
+        (child) => child.userData.isTeethHelper || child.userData.isFlatHelper
+      )
+      .forEach((child) => {
+        child.scale.set(
+          this.pointerScale,
+          this.pointerScale,
+          this.pointerScale
+        );
+      });
   }
   fitContainerToCamera() {
-    const boundingBox = new Box3().setFromObject(this.scene);
+    const boundingBox = new Box3().setFromObject(this.mesh);
     const center = boundingBox.getCenter(new Vector3());
     const size = boundingBox.getSize(new Vector3());
     const maxSize = Math.max(size.x, size.y, size.z);
@@ -545,11 +583,23 @@ export default class CustomViewer extends HTMLElement {
     this.camera.right = 2 * maxSize;
     this.camera.near = -maxSize * 4;
     this.camera.far = maxSize * 4;
-    // camera;
-    this.updateCamera(maxSize);
+
+    if (this.view === "top") {
+      this.camera.position.set(0, 0, maxSize);
+      this.camera.up = new Vector3(0, 1, 0);
+    }
+    if (this.view === "front") {
+      this.camera.position.set(maxSize, 0, 0);
+      this.camera.up = new Vector3(0, 0, 1);
+    }
+    this.camera.lookAt(0, 0, 0);
+    this.camera.updateProjectionMatrix();
+    // scale child of scene;
+    this.updateChildOfScene(size);
   }
   render() {
     // console.log("render");
+    this.updateFrameBox();
     this.renderer.render(this.scene, this.camera);
   }
 }
