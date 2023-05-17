@@ -1,4 +1,10 @@
-import { BoxGeometry, BufferGeometry, ShapeGeometry, ShapePath } from "three";
+import {
+  BoxGeometry,
+  BufferGeometry,
+  Shape,
+  ShapeGeometry,
+  ShapePath,
+} from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader";
 
@@ -59,5 +65,31 @@ export default class GeometryLoader {
         reject
       )
     );
+  }
+
+  // create a plane with tooth shape hole in it
+  static planeWithToothShapes(w = 1, h = 1): ShapeGeometry {
+    // create the outer shape, is a rect
+    const outerShape = new Shape();
+    outerShape.moveTo(-w, -h);
+    outerShape.lineTo(w, -h);
+    outerShape.lineTo(w, h);
+    outerShape.lineTo(-w, h);
+    outerShape.lineTo(-w, -h);
+
+    // create the inner shape, is a half circle
+    const innerShape = new Shape();
+    innerShape.moveTo((-w * 3) / 4, (-h * 3) / 4);
+    innerShape.lineTo(-w / 4, (-h * 3) / 4);
+    innerShape.lineTo(-w / 4, h / 4);
+    innerShape.lineTo(w / 4, h / 4);
+    innerShape.lineTo(w / 4, (-h * 3) / 4);
+    innerShape.lineTo((w * 3) / 4, (-h * 3) / 4);
+    innerShape.lineTo((w * 3) / 4, (h * 3) / 4);
+    innerShape.lineTo((-w * 3) / 4, (h * 3) / 4);
+    innerShape.lineTo((-w * 3) / 4, (-h * 3) / 4);
+    // add the inner shape hole
+    outerShape.holes.push(innerShape);
+    return new ShapeGeometry(outerShape);
   }
 }

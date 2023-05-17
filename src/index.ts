@@ -2,7 +2,7 @@ import GeometryLoader from "./GeometryLoader";
 import CustomViewer from "./CustomViewer";
 import CustomViewer2 from "./CustomViewer2";
 
-customElements.define("custom-viewer", CustomViewer2);
+customElements.define("custom-viewer", CustomViewer);
 
 // Write TypeScript code!
 const appDiv: HTMLElement = document.getElementById("app");
@@ -22,7 +22,7 @@ const clickListeners = {
     viewer.replaceGeometry(geometry);
   },
   "upside-down": () => {
-    viewer.rotateAroundY(Math.PI / 2);
+    viewer.rotateAroundAxis(Math.PI / 2);
   },
 };
 
