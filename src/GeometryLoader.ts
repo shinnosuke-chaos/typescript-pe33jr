@@ -81,11 +81,19 @@ export default class GeometryLoader {
     const innerShape = new Shape();
     innerShape.moveTo((-w * 3) / 4, (-h * 3) / 4);
     innerShape.lineTo(-w / 4, (-h * 3) / 4);
-    innerShape.lineTo(-w / 4, h / 4);
-    innerShape.lineTo(w / 4, h / 4);
+    // innerShape.lineTo(-w / 4, h / 4);
+    innerShape.lineTo(-w / 4, 0);
+
+    innerShape.arc(w / 4, 0, w / 4, Math.PI, 0, true);
+
+    // innerShape.lineTo(w / 4, h / 4);
+
     innerShape.lineTo(w / 4, (-h * 3) / 4);
     innerShape.lineTo((w * 3) / 4, (-h * 3) / 4);
-    innerShape.lineTo((w * 3) / 4, (h * 3) / 4);
+    // innerShape.lineTo((w * 3) / 4, (h * 3) / 4);
+    innerShape.lineTo((w * 3) / 4, 0);
+    innerShape.arc(-(w * 3) / 4, 0, (w * 3) / 4, 0, Math.PI, false);
+
     innerShape.lineTo((-w * 3) / 4, (h * 3) / 4);
     innerShape.lineTo((-w * 3) / 4, (-h * 3) / 4);
     // add the inner shape hole

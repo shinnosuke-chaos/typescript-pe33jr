@@ -57,7 +57,7 @@ export default class CustomViewer extends HTMLElement {
   // help
   axisHelper = new AxesHelper();
   // mesh
-  geometry = new BoxGeometry();
+  geometry = new SphereGeometry();
   // geometry = new BufferGeometry();
   // geometry = new CylinderGeometry();
   material = new MeshNormalMaterial();
