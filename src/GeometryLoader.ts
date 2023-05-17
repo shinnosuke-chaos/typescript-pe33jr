@@ -53,7 +53,9 @@ export default class GeometryLoader {
               .flat()
           );
         },
-        (event) => console.log(event),
+        (event) => {
+          /* console.log(event) */
+        },
         reject
       )
     );

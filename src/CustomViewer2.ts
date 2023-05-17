@@ -37,14 +37,8 @@ export default class CustomViewer extends HTMLElement {
   view: "top" | "front" = "front";
   pointerScale = 0.1;
   scene = new Scene();
-  camera = new OrthographicCamera(
-    -innerWidth / 200,
-    innerWidth / 200,
-    innerHeight / 200,
-    -innerHeight / 200,
-    1,
-    1000
-  );
+  camera = new OrthographicCamera();
+  cameraHeight = this.camera.far / 2;
   renderer = new WebGLRenderer();
   control: TransformControls = new TransformControls(
     this.camera,
@@ -54,39 +48,53 @@ export default class CustomViewer extends HTMLElement {
     this.camera,
     this.renderer.domElement
   );
+
+  // group
+  helpGroup = new Object3D();
+  // teeth
+  teeth: Group = new Group();
+  // help
+  axisHelper = new AxesHelper();
+  plane = new PlaneHelper(new Plane(new Vector3(0, 0, 1), 0), 1, 0xffff00);
+  // mesh
   geometry = new BoxGeometry();
   // geometry = new BufferGeometry();
-  // geometry = new CylinderGeometry(1, 2, 2);
-
+  // geometry = new CylinderGeometry();
   material = new MeshNormalMaterial();
   mesh = new Mesh(this.geometry, this.material);
-  axisHelper = new AxesHelper(5);
+  // others
   pointerMesh: Mesh;
   raycaster: Raycaster = new Raycaster();
   timer;
-  plane = new PlaneHelper(new Plane(new Vector3(0, 0, 1), 0), 5, 0xffff00);
-  teeth: Group = new Group();
-  private _target: any = this.mesh;
-  public get target(): any {
+  private _target: Object3D = null;
+  public get target(): Object3D {
     return this._target;
   }
-  public set target(value: any) {
+  public set target(value: Object3D) {
+    this.updateWireframe(false);
     this._target = value;
+    this.updateWireframe(true);
   }
-  frameBox = new Box3Helper(new Box3(), new Color(0xff0000));
+  updateWireframe(wireframe: boolean) {
+    this.target?.traverse((child) => {
+      if (child instanceof Mesh) {
+        child.material.wireframe = wireframe;
+      }
+    });
+  }
+
   constructor() {
     super();
     console.log("construct");
     this.scene.background = new Color(0xf0f0f0);
     this.updateOrbitControl();
+    this.helpGroup.add(this.axisHelper, this.plane);
     this.scene.add(
       this.camera,
       this.mesh,
-      this.axisHelper,
       this.control,
-      this.plane,
-      this.teeth,
-      this.frameBox
+      this.helpGroup,
+      this.teeth
     );
     this.renderer.setSize(innerWidth, innerHeight);
     this.appendChild(this.renderer.domElement);
@@ -100,20 +108,21 @@ export default class CustomViewer extends HTMLElement {
       case "view":
         console.log(name, newValue);
         this.view = newValue;
-        this.fitContainerToCamera();
+        this.fitCameraView();
         break;
     }
   }
   // watched properties
   connectedCallback() {
     console.log("connected");
-    this.liftZAndCenterXY(true);
+    this.target = this.mesh;
     this.renderer.setAnimationLoop(this.render.bind(this));
     window.addEventListener("resize", this.resizeListener, false);
     this.addEventListener("pointermove", this.onPointerMoveListener);
     this.addEventListener("click", this.onClickListener);
     document.addEventListener("keydown", this.onkeydownListener);
     document.addEventListener("wheel", this.onwheelListener);
+    this.liftZAndCenterXY(true);
     this.loadTeethGroup();
   }
   disconnectedCallback() {
@@ -124,7 +133,6 @@ export default class CustomViewer extends HTMLElement {
         child.material.dispose();
       }
     });
-
     this.scene.children = [];
     this.scene = null;
     document.body.removeChild(this.renderer.domElement);
@@ -170,7 +178,7 @@ export default class CustomViewer extends HTMLElement {
           return;
         }
         // 目标点为非固定点,找本区域内是否有已经确定的固定点
-        const existPoint = this.scene.children.find(
+        const existPoint = this.teeth.children.find(
           (child) =>
             child.userData.isTeethHelper &&
             child.userData.object === this.pointerMesh.userData.object &&
@@ -194,7 +202,7 @@ export default class CustomViewer extends HTMLElement {
       }
       // 如果flat上的点达到3个,则方平目标
       if (
-        this.scene.children.filter(
+        this.mesh.children.filter(
           (child) => child.userData.isFlatHelper && child.userData.confirmed
         ).length === 3
       ) {
@@ -203,16 +211,28 @@ export default class CustomViewer extends HTMLElement {
     }
   };
   onPointerMoveListener = (event) => {
-    // 回收所有未固定的flat点
     // 回收所有未固定的teeth点
-    for (const pointer of this.scene.children.filter(
-      (child) => child.userData.isFlatHelper || child.userData.isTeethHelper
+    for (const pointer of this.teeth.children.filter(
+      (child) => child.userData.isTeethHelper
     )) {
       if (this.pointerMesh === pointer) {
         continue;
       }
       if (!pointer.userData.confirmed) {
-        this.scene.remove(pointer);
+        this.teeth.remove(pointer);
+        pointer["geometry"].dispose();
+        pointer["material"].dispose();
+      }
+    }
+    // 回收所有未固定的flat点
+    for (const pointer of this.mesh.children.filter(
+      (child) => child.userData.isFlatHelper
+    )) {
+      if (this.pointerMesh === pointer) {
+        continue;
+      }
+      if (!pointer.userData.confirmed) {
+        this.mesh.remove(pointer);
         pointer["geometry"].dispose();
         pointer["material"].dispose();
       }
@@ -221,89 +241,71 @@ export default class CustomViewer extends HTMLElement {
     const x = (event.clientX / innerWidth) * 2 - 1;
     const y = -(event.clientY / innerHeight) * 2 + 1;
     this.raycaster.setFromCamera(new Vector2(x, y), this.camera);
-    // 以下四个相交存在优先级,满足一个则直接返回
-    // 当前鼠标悬停是否在teeth点上
-    {
-      const intersects = this.raycaster.intersectObjects(
-        this.scene.children.filter((child) => child.userData.isTeethHelper)
-      );
-      if (intersects.length) {
-        // intersected point position
-        this.pointerMesh = intersects[0].object as Mesh;
+    // 悬停在teeth上
+    // 悬停在mesh上
+    // 设置当前对象
+
+    const intersects = this.raycaster.intersectObjects(
+      this.teeth.children.concat(this.mesh),
+      false
+    );
+    if (intersects.length) {
+      // intersected point position
+      const object = intersects[0].object;
+      const isExistHelper =
+        object.userData.isTeethHelper || object.userData.isFlatHelper;
+      // 当前鼠标悬停是否在teeth点上
+      //  当前鼠标悬停是否在flat点上
+
+      if (isExistHelper) {
+        this.pointerMesh = object as Mesh;
         return;
       }
-    }
-    //  当前鼠标悬停是否在flat点上
-    {
-      const intersects = this.raycaster.intersectObjects(
-        this.scene.children.filter((child) => child.userData.isFlatHelper),
-        false
-      );
-      if (intersects.length) {
-        // intersected point position
-        this.pointerMesh = intersects[0].object as Mesh;
+      const isMeshIntersected = object === this.mesh;
+      const point = new Vector3().copy(intersects[0].point); // point in world
+      if (isMeshIntersected) {
+        this.mesh.worldToLocal(point);
+      } else {
+        this.teeth.worldToLocal(point);
+      }
+
+      // 同一牙位,未固定的前置悬停点存在,则仅改变位置,不重新渲染
+      if (
+        this.pointerMesh &&
+        this.pointerMesh.userData.object === object &&
+        !this.pointerMesh.userData.confirmed
+      ) {
+        this.pointerMesh.position.copy(point);
         return;
       }
+      const radius = isMeshIntersected
+        ? this.mesh.userData.maxSize / 10
+        : this.teeth.userData.maxSize / 2;
+      console.debug("radius", radius, isMeshIntersected);
+
+      const mesh = new Mesh(
+        new SphereGeometry(radius),
+        new MeshNormalMaterial()
+      );
+      mesh.position.set(point.x, point.y, point.z);
+      mesh.userData.object = object;
+      mesh.userData.isTeethHelper = !isMeshIntersected;
+      mesh.userData.isFlatHelper = isMeshIntersected;
+      mesh.userData.confirmed = false;
+      if (isMeshIntersected) {
+        this.mesh.add(mesh);
+      } else {
+        mesh.scale.set(
+          this.teeth.scale.x,
+          this.teeth.scale.y,
+          this.teeth.scale.z
+        );
+        this.teeth.add(mesh);
+      }
+      this.pointerMesh = mesh;
+      return;
     }
 
-    // 悬停在teeth上,设置当前选定点牙位UUID和牙位的Size(z===0)
-    {
-      const intersects = this.raycaster.intersectObjects(this.teeth.children);
-      if (intersects.length) {
-        // intersected point position
-        const point = intersects[0].point;
-        const object = intersects[0].object;
-        // 同一牙位,未固定的前置悬停点存在,则仅改变位置,不重新渲染
-        if (
-          this.pointerMesh &&
-          this.pointerMesh.userData.object === object &&
-          !this.pointerMesh.userData.confirmed
-        ) {
-          this.pointerMesh.position.copy(point);
-          return;
-        }
-        const mesh = new Mesh(
-          // TODO point radius
-          new SphereGeometry(this.pointerScale),
-          new MeshNormalMaterial()
-        );
-        mesh.position.set(point.x, point.y, point.z);
-        mesh.userData.object = object;
-        mesh.userData.isTeethHelper = true;
-        mesh.userData.confirmed = false;
-        this.scene.add(mesh);
-        this.pointerMesh = mesh;
-        return;
-      }
-    }
-    // 悬停在flat上
-    {
-      const intersects = this.raycaster.intersectObject(this.mesh);
-      if (intersects.length) {
-        // intersected point position
-        const point = intersects[0].point;
-        // 非牙位上的未固定的前置悬停点存在,则仅改变位置,不重新渲染
-        if (
-          this.pointerMesh &&
-          this.pointerMesh.userData.isFlatHelper &&
-          !this.pointerMesh.userData.confirmed
-        ) {
-          this.pointerMesh.position.copy(point);
-          return;
-        }
-        const mesh = new Mesh(
-          // TODO point radius
-          new SphereGeometry(this.pointerScale),
-          new MeshNormalMaterial()
-        );
-        mesh.position.set(point.x, point.y, point.z);
-        mesh.userData.isFlatHelper = true;
-        mesh.userData.confirmed = false;
-        this.scene.add(mesh);
-        this.pointerMesh = mesh;
-        return;
-      }
-    }
     // 不存在悬停点 清空当前悬停点
     this.pointerMesh = undefined;
   };
@@ -473,9 +475,8 @@ export default class CustomViewer extends HTMLElement {
     }
   };
   resizeListener = () => {
-    this.camera.updateProjectionMatrix();
+    this.fitCameraView();
     this.renderer.setSize(innerWidth, innerHeight);
-    this.fitContainerToCamera();
   };
   rotateAroundAxis(dy = 0, axis = new Vector3(0, 1, 0)) {
     // const v = new Vector3(0, 1, 0);
@@ -513,10 +514,12 @@ export default class CustomViewer extends HTMLElement {
         this.teeth.add(new Mesh(shape, material));
       }
       // 获取teeth group的center,此步骤之前 一定不也能对teeth进行缩放
-      const center = new Box3()
-        .setFromObject(this.teeth)
-        .getCenter(new Vector3());
-      console.debug("center", center);
+      const box = new Box3().setFromObject(this.teeth);
+      const center = box.getCenter(new Vector3());
+      console.debug("Teeth Center", center);
+      const size = box.getSize(new Vector3());
+      console.debug("Teeth Size:", size);
+      this.teeth.userData.maxSize = Math.max(size.x, size.y, size.z);
       // 对各个shape 相对于 teeth 进行center
       for (const shape of this.teeth.children) {
         shape["geometry"].translate(-center.x, -center.y, 0);
@@ -524,82 +527,64 @@ export default class CustomViewer extends HTMLElement {
       }
       // 此时针对teeth的位置进行旋转和缩放,可选,根据具体的svg而定
       this.teeth.applyMatrix4(new Matrix4().makeRotationZ(Math.PI));
-      this.teeth.userData.size = new Box3()
-        .setFromObject(this.teeth)
-        .getSize(new Vector3());
-      console.debug(
-        new Box3().setFromObject(this.teeth).getSize(new Vector3())
-      );
-
-      this.fitContainerToCamera();
+      this.fitCameraView();
     });
   }
   replaceGeometry(geometry: BufferGeometry) {
+    console.debug("replace geometry", geometry);
+
     if (geometry) {
       this.mesh.geometry.dispose();
       this.mesh.geometry = geometry as any;
+      this.liftZAndCenterXY(true);
+      this.fitCameraView();
     }
-    this.fitContainerToCamera();
-  }
-  updateFrameBox() {
-    this.frameBox.box.setFromObject(this.target);
   }
   updateOrbitControl() {
     // only dragging is enabled
     this.orbitControl.enableZoom = false;
     this.orbitControl.enablePan = false;
   }
-  updateChildOfScene(size = new Vector3(0, 0, 8)) {
-    const maxSize = Math.max(size.x, size.y, size.z);
-    this.axisHelper.scale.set(size.x + 3, size.y + 3, size.z + 3);
-    this.teeth.scale.set(
-      (maxSize / (this.teeth.userData.size?.x || maxSize)) * 1.1,
-      (maxSize / (this.teeth.userData.size?.y || maxSize)) * 1.1,
-      1
-    );
-    this.plane.size = maxSize * 1.2;
-    this.pointerScale = (0.1 * maxSize) / 8;
-    this.scene.children
-      .filter(
-        (child) => child.userData.isTeethHelper || child.userData.isFlatHelper
-      )
-      .forEach((child) => {
-        child.scale.set(
-          this.pointerScale,
-          this.pointerScale,
-          this.pointerScale
-        );
-      });
-  }
-  fitContainerToCamera() {
+
+  fitCameraView() {
+    console.debug("camera", this.camera);
     const boundingBox = new Box3().setFromObject(this.mesh);
+    console.debug("boundingBox", boundingBox);
+
     const center = boundingBox.getCenter(new Vector3());
+    console.debug("center", center);
     const size = boundingBox.getSize(new Vector3());
-    const maxSize = Math.max(size.x, size.y, size.z);
-    this.camera.zoom = 1;
+    console.debug("size", size);
+    const maxSize = Math.max(size.x, size.y, size.z) || 5;
+
+    this.mesh.userData.maxSize = maxSize;
+
     this.camera.left = -(2 * maxSize);
     this.camera.bottom = -(2 * maxSize);
     this.camera.top = 2 * maxSize;
     this.camera.right = 2 * maxSize;
     this.camera.near = -maxSize * 4;
     this.camera.far = maxSize * 4;
-
     if (this.view === "top") {
-      this.camera.position.set(0, 0, maxSize);
+      this.camera.position.set(0, 0, maxSize * 2);
       this.camera.up = new Vector3(0, 1, 0);
     }
     if (this.view === "front") {
-      this.camera.position.set(maxSize, 0, 0);
+      this.camera.position.set(maxSize * 2, 0, 0);
       this.camera.up = new Vector3(0, 0, 1);
     }
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
-    // scale child of scene;
-    this.updateChildOfScene(size);
+
+    const teethScale =
+      (maxSize / (this.teeth.userData.maxSize || maxSize)) * 1.1;
+    this.teeth.scale.set(teethScale, teethScale, teethScale);
+    const helpScale = maxSize * 1.2;
+    this.helpGroup.scale.set(helpScale, helpScale, helpScale);
+    console.debug("maxSize", maxSize, teethScale, helpScale);
   }
   render() {
     // console.log("render");
-    this.updateFrameBox();
     this.renderer.render(this.scene, this.camera);
   }
 }
