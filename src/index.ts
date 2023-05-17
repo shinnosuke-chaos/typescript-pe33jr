@@ -22,7 +22,7 @@ const clickListeners = {
     viewer.replaceGeometry(geometry);
   },
   "upside-down": () => {
-    viewer.rotateAroundAxis(Math.PI / 2);
+    viewer.rotateAroundAxis(Math.PI);
   },
 };
 

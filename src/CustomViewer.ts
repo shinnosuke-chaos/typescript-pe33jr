@@ -5,11 +5,14 @@ import {
   BufferGeometry,
   Color,
   DoubleSide,
+  Group,
   Material,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshNormalMaterial,
+  MeshPhongMaterial,
+  MeshStandardMaterial,
   Object3D,
   OrthographicCamera,
   Plane,
@@ -25,6 +28,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import GeometryLoader from "./GeometryLoader";
 
+const color = 0xffffff;
+const emissive = 0xff0000;
 export default class CustomViewer extends HTMLElement {
   view: "top" | "front" = "front";
   scene = new Scene();
@@ -45,7 +50,9 @@ export default class CustomViewer extends HTMLElement {
   // teeth
   teeth = new Mesh(
     GeometryLoader.planeWithToothShapes(),
-    new MeshNormalMaterial({ side: DoubleSide })
+    new MeshNormalMaterial({
+      side: DoubleSide,
+    })
   );
   // help
   axisHelper = new AxesHelper();
@@ -64,14 +71,14 @@ export default class CustomViewer extends HTMLElement {
     return this._target;
   }
   public set target(value: Object3D) {
-    this.updateWireframe(false);
+    this.focusTarget(false);
     this._target = value;
-    this.updateWireframe(true);
+    this.focusTarget(true);
   }
-  updateWireframe(wireframe: boolean) {
+  focusTarget(focus: boolean) {
     this.target?.traverse((child) => {
       if (child instanceof Mesh) {
-        child.material.wireframe = wireframe;
+        // child.material.metalness = focus ? 0.8 : 0.2;
       }
     });
   }
@@ -148,10 +155,12 @@ export default class CustomViewer extends HTMLElement {
     if (this.pointerMesh) {
       if (this.pointerMesh.userData.isTeethHelper) {
         if (this.pointerMesh.userData.confirmed) {
+          if (this.target !== this.pointerMesh) {
+            this.pointerMesh.userData.previousTarget = this.target;
+            this.target = this.pointerMesh;
+            return;
+          }
           this.target = this.pointerMesh.userData.previousTarget || this.target;
-        } else {
-          this.pointerMesh.userData.previousTarget = this.target;
-          this.target = this.pointerMesh;
         }
         this.pointerMesh.userData.confirmed =
           !this.pointerMesh.userData.confirmed;
@@ -205,8 +214,8 @@ export default class CustomViewer extends HTMLElement {
         object.userData.isTeethHelper || object.userData.isFlatHelper;
       // 当前鼠标悬停是否在teeth点上
       //  当前鼠标悬停是否在flat点上
-      const isTeethHelper = !!event.altKey;
-      const isFlatHelper = !!event.ctrlKey;
+      const isTeethHelper = this.view === "top";
+      const isFlatHelper = this.view === "front";
       const color = isTeethHelper
         ? 0xff0000
         : isFlatHelper
@@ -242,7 +251,7 @@ export default class CustomViewer extends HTMLElement {
         })
       );
       mesh.position.set(point.x, point.y, point.z);
-
+      mesh.userData.radius = radius;
       mesh.userData.isTeethHelper = isTeethHelper;
       mesh.userData.isFlatHelper = isFlatHelper;
       mesh.userData.confirmed = false;
@@ -269,7 +278,7 @@ export default class CustomViewer extends HTMLElement {
       return;
     }
 
-    let d = 0.1;
+    let d = (0.1 * this.mesh.userData.maxSize) / 2;
     let x = 0,
       y = 0,
       z = 0,
@@ -297,10 +306,10 @@ export default class CustomViewer extends HTMLElement {
         a = d;
         break;
       case "r":
-        s = -d;
+        s = -0.1;
         break;
       case "f":
-        s = d;
+        s = 0.1;
         break;
       case "t":
         h = d;
@@ -312,7 +321,17 @@ export default class CustomViewer extends HTMLElement {
 
     const matrix = new Matrix4();
     if (x || y || z) matrix.makeTranslation(x, y, z);
-    if (s) matrix.makeScale(s + 1, s + 1, s + 1);
+    if (s) {
+      if (this.target.userData.isTeethHelper) {
+        (this.target as Mesh).geometry.dispose();
+        this.target.userData.radius = this.target.userData.radius * (s + 1);
+        (this.target as Mesh).geometry = new SphereGeometry(
+          this.target.userData.radius
+        );
+        return;
+      }
+      matrix.makeScale(s + 1, s + 1, s + 1);
+    }
     if (a) {
       console.debug("position", this.target.position);
       const pos = new Vector3().copy(this.target.position);
@@ -327,14 +346,6 @@ export default class CustomViewer extends HTMLElement {
     }
     if (h) matrix.makeTranslation(0, 0, h);
     this.target.applyMatrix4(matrix);
-
-    this.scene.children
-      .filter(
-        (child) =>
-          (this.target === this.mesh && child.userData.isFlatHelper) ||
-          (this.target === this.teeth && child.userData.isTeethHelper)
-      )
-      .forEach((child) => child.applyMatrix4(matrix));
 
     // matrix only affect x and y axis
     if (this.target.userData.previousTarget) {
@@ -372,7 +383,7 @@ export default class CustomViewer extends HTMLElement {
   }
   flatMesh() {
     console.log("flat mesh with three points");
-    const [p1, p2, p3] = this.scene.children
+    const [p1, p2, p3] = this.mesh.children
       .filter(
         (child) => child.userData.isFlatHelper && child.userData.confirmed
       )
@@ -438,6 +449,7 @@ export default class CustomViewer extends HTMLElement {
         this.mesh.applyMatrix4(
           new Matrix4().makeTranslation(-center.x, -center.y, -box.min.z)
         );
+        this.fitCameraView();
       },
       immediate ? 0 : 1000
     );
@@ -449,7 +461,6 @@ export default class CustomViewer extends HTMLElement {
       this.mesh.geometry.dispose();
       this.mesh.geometry = geometry as any;
       this.liftZAndCenterXY(true);
-      this.fitCameraView();
     }
   }
   updateOrbitControl() {
@@ -471,10 +482,10 @@ export default class CustomViewer extends HTMLElement {
 
     this.mesh.userData.maxSize = maxSize;
 
-    this.camera.left = -(2 * maxSize);
-    this.camera.bottom = -(2 * maxSize);
-    this.camera.top = 2 * maxSize;
-    this.camera.right = 2 * maxSize;
+    this.camera.left = -(1.5 * maxSize);
+    this.camera.bottom = -(1.5 * maxSize);
+    this.camera.top = 1.5 * maxSize;
+    this.camera.right = 1.5 * maxSize;
     this.camera.near = -maxSize * 4;
     this.camera.far = maxSize * 4;
     if (this.view === "top") {
@@ -488,7 +499,13 @@ export default class CustomViewer extends HTMLElement {
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
 
-    this.teeth.scale.set(size.x * 1.1, size.y * 1.1, 1);
+    // this.teeth.scale.set(1, 1, 1);
+    this.teeth.geometry.dispose();
+    this.teeth.geometry = GeometryLoader.planeWithToothShapes(
+      size.x / 1.2,
+      size.y / 1.2
+    );
+    this.teeth.position.setZ(size.z);
     this.helpGroup.scale.set(size.x * 1.1, size.y * 1.1, size.z * 1.1);
     console.debug("maxSize", maxSize);
   }
