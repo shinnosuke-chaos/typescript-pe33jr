@@ -5,6 +5,7 @@ import {
   BufferGeometry,
   Color,
   DoubleSide,
+  ExtrudeGeometry,
   Group,
   Material,
   Matrix4,
@@ -62,6 +63,8 @@ export default class CustomViewer extends HTMLElement {
   // geometry = new CylinderGeometry();
   material = new MeshNormalMaterial();
   mesh = new Mesh(this.geometry, this.material);
+
+  extrude = new Mesh(new BufferGeometry(), this.material);
   // others
   pointerMesh: Mesh;
   raycaster: Raycaster = new Raycaster();
@@ -94,7 +97,8 @@ export default class CustomViewer extends HTMLElement {
       this.mesh,
       this.control,
       this.helpGroup,
-      this.teeth
+      this.teeth,
+      this.extrude
     );
     this.renderer.setSize(innerWidth, innerHeight);
     this.appendChild(this.renderer.domElement);
@@ -454,7 +458,7 @@ export default class CustomViewer extends HTMLElement {
       immediate ? 0 : 1000
     );
   }
-  replaceGeometry(geometry: BufferGeometry) {
+  replaceMeshGeometry(geometry: BufferGeometry) {
     console.debug("replace geometry", geometry);
 
     if (geometry) {
@@ -462,6 +466,33 @@ export default class CustomViewer extends HTMLElement {
       this.mesh.geometry = geometry as any;
       this.liftZAndCenterXY(true);
     }
+  }
+  switchExtrudeGeometry() {
+    if (!this.mesh.visible) {
+      this.mesh.visible = true;
+      this.extrude.visible = false;
+      return;
+    }
+    console.debug("switch extrude geometry");
+    const points = this.mesh.children
+      .filter(
+        (child) => child.userData.confirmed && child.userData.isTeethHelper
+      )
+      .map((point) => new Vector3().copy(point.position));
+    // .map((point) => ({
+    //   x: point.position.x,
+    //   y: point.position.y,
+    //   z: point.position.z,
+    //   a: point.userData.radius,
+    // }));
+    const geometry = GeometryLoader.extrudeGeometryWithPoints(points);
+
+    if (geometry) {
+      this.extrude.geometry.dispose();
+      this.extrude.geometry = geometry as any;
+    }
+    this.mesh.visible = false;
+    this.extrude.visible = true;
   }
   updateOrbitControl() {
     // only dragging is enabled

@@ -1,12 +1,16 @@
 import {
   BoxGeometry,
   BufferGeometry,
+  CatmullRomCurve3,
+  ExtrudeGeometry,
   Shape,
   ShapeGeometry,
   ShapePath,
+  Vector3,
 } from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader";
+import { ExtrudePoint } from "./Types";
 
 export default class GeometryLoader {
   static selectFromFile(): Promise<BufferGeometry> {
@@ -99,5 +103,29 @@ export default class GeometryLoader {
     // add the inner shape hole
     outerShape.holes.push(innerShape);
     return new ShapeGeometry(outerShape);
+  }
+
+  // extrude geometry with points
+  static extrudeGeometryWithPoints(points: Vector3[]): ExtrudeGeometry {
+    return new ExtrudeGeometry(GeometryLoader.createHouseShape(), {
+      steps: 2,
+      depth: 16,
+      bevelEnabled: true,
+      bevelThickness: 1,
+      bevelSize: 1,
+      bevelOffset: 0,
+      bevelSegments: 1,
+      extrudePath: new CatmullRomCurve3(points, false, "catmullrom", 0.5),
+    });
+  }
+
+  static createHouseShape(len = 1) {
+    var shape = new Shape();
+    shape.moveTo(0, 0);
+    shape.absarc(0, len, len, Math.PI * 0.5, Math.PI * 1.5, false);
+    shape.lineTo(len, 0);
+    shape.lineTo(len, len * 2);
+
+    return shape;
   }
 }

@@ -19,10 +19,13 @@ const clickListeners = {
   },
   "load-stl": async () => {
     const geometry = await GeometryLoader.selectFromFile();
-    viewer.replaceGeometry(geometry);
+    viewer.replaceMeshGeometry(geometry);
   },
   "upside-down": () => {
     viewer.rotateAroundAxis(Math.PI);
+  },
+  "switch-extrude": () => {
+    viewer.switchExtrudeGeometry();
   },
 };
 
