@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.0.0)
 project(shell VERSION 0.1.0)
 
+set(CMAKE_TOOLCHAIN_FILE "C:\\dev\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake")
+
 # # CGAL and its components
-find_package(CGAL REQUIRED)
+find_package(CGAL CONFIG REQUIRED)
 
 # # Boost and its components
 find_package(Boost REQUIRED)

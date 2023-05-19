@@ -1,3 +1,11 @@
-# typescript-pe33jr
+# scjb 上瓷夹板
 
-[Edit on StackBlitz ⚡️](https://stackblitz.com/edit/typescript-pe33jr)
+---
+
+## How to run
+
+```shell
+    npm run watch  && npm run start
+```
+
+## shell ...
