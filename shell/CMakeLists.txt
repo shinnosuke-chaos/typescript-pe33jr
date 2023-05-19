@@ -15,6 +15,15 @@ find_package(Boost REQUIRED)
 
 add_executable(shell main.cpp)
 
+target_link_libraries(shell PRIVATE CGAL::CGAL)
+
+add_custom_command(TARGET shell POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:shell> "../dist"
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:shell>\\mpfr-6.dll "../dist"
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:shell>\\gmp-10.dll "../dist"
+    COMMENT "Copying to output directory"
+)
+
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
