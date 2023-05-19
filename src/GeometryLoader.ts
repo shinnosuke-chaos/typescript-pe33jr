@@ -106,11 +106,19 @@ export default class GeometryLoader {
   }
 
   // extrude geometry with points
-  static extrudeGeometryWithPoints(points: Vector3[]): ExtrudeGeometry {
-    return new ExtrudeGeometry(GeometryLoader.createHouseShape(), {
-      steps: 2,
+  static extrudeGeometryWithPoints(
+    points: Vector3[],
+    len = 1
+  ): ExtrudeGeometry {
+    // sort points to a line
+    points.sort((a, b) => {
+      return a.x - b.x;
+    });
+
+    return new ExtrudeGeometry(GeometryLoader.createHouseShape(len), {
+      steps: 20,
       depth: 16,
-      bevelEnabled: true,
+      bevelEnabled: false,
       bevelThickness: 1,
       bevelSize: 1,
       bevelOffset: 0,
@@ -121,10 +129,19 @@ export default class GeometryLoader {
 
   static createHouseShape(len = 1) {
     var shape = new Shape();
-    shape.moveTo(0, 0);
-    shape.absarc(0, len, len, Math.PI * 0.5, Math.PI * 1.5, false);
-    shape.lineTo(len, 0);
-    shape.lineTo(len, len * 2);
+    // shape.moveTo(0, 0);
+    // shape.lineTo(len, 0);
+    // shape.absarc(0, 0, len, Math.PI * 0.5, Math.PI * 1.5, true);
+    // shape.lineTo(len, len * 2);
+    // shape.moveTo(0, 0);
+    shape.arc(0, 0, len / 2, 0, Math.PI * 2, true);
+    // shape.arc(0, 0, len / 2, Math.PI * 1.5, Math.PI * 0.5, true);
+    // shape.lineTo(0, len/2);
+    // shape.lineTo(0, -len);
+    // shape.lineTo(0, 0);
+    // shape.lineTo(-len, len / 2);
+    // // shape.lineTo(-len, len / 2);
+    // shape.lineTo(0, 0);
 
     return shape;
   }

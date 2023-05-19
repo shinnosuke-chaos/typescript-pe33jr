@@ -424,6 +424,13 @@ export default class CustomViewer extends HTMLElement {
     if (event.shiftKey) {
       dY /= 10;
     }
+
+    if (this.view === "top") {
+      this.radius += dY / 500;
+      this.switchExtrudeGeometry();
+      return;
+    }
+
     if (event.altKey) {
       this.rotateAroundAxis(dY / 500);
       this.liftZAndCenterXY();
@@ -462,37 +469,49 @@ export default class CustomViewer extends HTMLElement {
     console.debug("replace geometry", geometry);
 
     if (geometry) {
+      this.mesh.children.forEach((child) => {
+        child["geometry"].dispose();
+      });
+      this.mesh.children = [];
       this.mesh.geometry.dispose();
       this.mesh.geometry = geometry as any;
       this.liftZAndCenterXY(true);
     }
   }
+  radius = 1;
   switchExtrudeGeometry() {
-    if (!this.mesh.visible) {
-      this.mesh.visible = true;
-      this.extrude.visible = false;
-      return;
-    }
+    // if (!this.mesh.visible) {
+    //   this.mesh.visible = true;
+    //   this.extrude.visible = true;
+    //   return;
+    // }
     console.debug("switch extrude geometry");
     const points = this.mesh.children
       .filter(
         (child) => child.userData.confirmed && child.userData.isTeethHelper
       )
-      .map((point) => new Vector3().copy(point.position));
+      .map(
+        (point) => new Vector3().copy(this.mesh.localToWorld(point.position))
+        // .setZ(this.teeth.position.z)
+      );
     // .map((point) => ({
     //   x: point.position.x,
     //   y: point.position.y,
     //   z: point.position.z,
     //   a: point.userData.radius,
     // }));
-    const geometry = GeometryLoader.extrudeGeometryWithPoints(points);
+    if (!points.length) return;
+    const geometry = GeometryLoader.extrudeGeometryWithPoints(
+      points,
+      this.radius
+    );
 
     if (geometry) {
       this.extrude.geometry.dispose();
       this.extrude.geometry = geometry as any;
     }
-    this.mesh.visible = false;
-    this.extrude.visible = true;
+    // this.mesh.visible = false;
+    // this.extrude.visible = true
   }
   updateOrbitControl() {
     // only dragging is enabled
@@ -530,6 +549,7 @@ export default class CustomViewer extends HTMLElement {
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
 
+    this.radius = maxSize / 4;
     // this.teeth.scale.set(1, 1, 1);
     this.teeth.geometry.dispose();
     this.teeth.geometry = GeometryLoader.planeWithToothShapes(
@@ -538,6 +558,7 @@ export default class CustomViewer extends HTMLElement {
     );
     this.teeth.position.setZ(size.z);
     this.helpGroup.scale.set(size.x * 1.1, size.y * 1.1, size.z * 1.1);
+    this.switchExtrudeGeometry();
     console.debug("maxSize", maxSize);
   }
   render() {
