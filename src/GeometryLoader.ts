@@ -121,7 +121,10 @@ export default class GeometryLoader {
     //   return a.x - b.x;
     // });
 
-    const sortedPoints = findShortestPath(points);
+    const sortedPoints = findShortestPath(points).map((p) => ({
+      ...p,
+      z: p.z - 7,
+    }));
 
     return new ExtrudeGeometry(GeometryLoader.createHouseShape(len), {
       steps: 20,

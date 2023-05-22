@@ -487,7 +487,7 @@ export default class CustomViewer extends HTMLElement {
       this.resetContainer_1();
     }
   }
-  radius = 1;
+  radius: number;
   switchExtrudeGeometry() {
     // if (!this.mesh.visible) {
     //   this.mesh.visible = true;
@@ -550,7 +550,7 @@ export default class CustomViewer extends HTMLElement {
     this.camera.right = 1.5 * maxSize * rate;
     this.camera.updateProjectionMatrix();
 
-    this.radius = maxSize / 4;
+    this.radius = maxSize / 2.75;
 
     const shapeGeometry = GeometryLoader.planeWithToothShapes(
       size.x / 1.2,
