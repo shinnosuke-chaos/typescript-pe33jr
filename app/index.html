@@ -8,14 +8,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.152.2/three.min.js" integrity="sha512-R7eFJsc3NlvsTn5hdD/Xvi6FwpFGAoGOa2nBNU89DXAZzXgQQrfhgHVpm5Kh7H9EuCU3Ymexph9z4IiHrq977g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   </head>
   <body>
-    <div id="app">
-      <h1>TypeScript Starter</h1>
-      <button data-action="switch-view">Switch View</button>
-      <button data-action="load-stl">Load STL</button>
-      <button data-action="upside-down">Upside Down</button>
-      <button data-action="switch-extrude">Switch Extrude</button>
-    </div>
-    <custom-viewer view="top"></custom-viewer>
+    <my-app>
+      <tool-bar>
+        <h1>TypeScript Starter</h1>
+        <button data-action="switch-view">Switch View</button>
+        <button data-action="load-stl">Load STL</button>
+        <button data-action="upside-down">Upside Down</button>
+        <button data-action="switch-extrude">Switch Extrude</button>
+      </tool-bar>
+      <custom-viewer view="top"></custom-viewer>
+    </my-app>
     <script src="./bundle/index.bundle.js"></script>
   </body>
 </html>

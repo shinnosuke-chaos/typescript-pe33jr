@@ -11,6 +11,7 @@ import {
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader";
 import { ExtrudePoint } from "./Types";
+import { findShortestPath } from "./FindShortPath";
 
 export default class GeometryLoader {
   static selectFromFile(): Promise<BufferGeometry> {
@@ -22,7 +23,12 @@ export default class GeometryLoader {
       input.onchange = (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (!file) return;
-        GeometryLoader.readFileToGeometry(file).then(resolve).catch(reject);
+        GeometryLoader.readFileToGeometry(file)
+          .then((geometry) => {
+            geometry.userData.filePath = file.path;
+            resolve(geometry);
+          })
+          .catch(reject);
       };
       input.click();
     });
@@ -111,9 +117,11 @@ export default class GeometryLoader {
     len = 1
   ): ExtrudeGeometry {
     // sort points to a line
-    points.sort((a, b) => {
-      return a.x - b.x;
-    });
+    // points.sort((a, b) => {
+    //   return a.x - b.x;
+    // });
+
+    const sortedPoints = findShortestPath(points);
 
     return new ExtrudeGeometry(GeometryLoader.createHouseShape(len), {
       steps: 20,
@@ -123,7 +131,7 @@ export default class GeometryLoader {
       bevelSize: 1,
       bevelOffset: 0,
       bevelSegments: 1,
-      extrudePath: new CatmullRomCurve3(points, false, "catmullrom", 0.5),
+      extrudePath: new CatmullRomCurve3(sortedPoints, false, "catmullrom", 0.5),
     });
   }
 

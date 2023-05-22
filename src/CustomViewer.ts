@@ -28,10 +28,21 @@ import {
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import GeometryLoader from "./GeometryLoader";
+import { State } from "./Types";
 
 const color = 0xffffff;
 const emissive = 0xff0000;
 export default class CustomViewer extends HTMLElement {
+  // groups
+  container_1: Group;
+  container_2: Group;
+  container_helper: Group;
+
+  get model() {
+    return this.container_2?.userData?.model;
+  }
+
+  state: State;
   view: "top" | "front" = "front";
   scene = new Scene();
   camera = new OrthographicCamera();
@@ -46,8 +57,6 @@ export default class CustomViewer extends HTMLElement {
     this.renderer.domElement
   );
 
-  // group
-  helpGroup = new Object3D();
   // teeth
   teeth = new Mesh(
     GeometryLoader.planeWithToothShapes(),
@@ -61,10 +70,10 @@ export default class CustomViewer extends HTMLElement {
   geometry = new SphereGeometry();
   // geometry = new BufferGeometry();
   // geometry = new CylinderGeometry();
-  material = new MeshNormalMaterial();
-  mesh = new Mesh(this.geometry, this.material);
+  modelMaterial = new MeshNormalMaterial();
+  mesh: Mesh;
 
-  extrude = new Mesh(new BufferGeometry(), this.material);
+  extrude = new Mesh(new BufferGeometry(), this.modelMaterial);
   // others
   pointerMesh: Mesh;
   raycaster: Raycaster = new Raycaster();
@@ -89,19 +98,22 @@ export default class CustomViewer extends HTMLElement {
   constructor() {
     super();
     console.log("construct");
-    this.scene.background = new Color(0xf0f0f0);
+
+    // this.container_1 = new Group();
+    // this.container_2 = new Group();
+    this.container_helper = new Group();
+
+    this.container_helper.add(this.axisHelper);
+
     this.updateOrbitControl();
-    this.helpGroup.add(this.axisHelper, this.teeth);
-    this.scene.add(
-      this.camera,
-      this.mesh,
-      this.control,
-      this.helpGroup,
-      this.teeth,
-      this.extrude
-    );
+
+    this.scene.background = new Color(0xf0f0f0);
+    this.scene.add(this.camera, this.control, this.container_helper);
     this.renderer.setSize(innerWidth, innerHeight);
     this.appendChild(this.renderer.domElement);
+  }
+  triggerUpdate() {
+    this.dispatchEvent(new CustomEvent("update"));
   }
   static get observedAttributes() {
     return ["view"];
@@ -112,14 +124,22 @@ export default class CustomViewer extends HTMLElement {
       case "view":
         console.log(name, newValue);
         this.view = newValue;
-        this.fitCameraView();
+        if (this.view === "top") {
+          this.camera.position.set(0, 0, 1000);
+          this.camera.up = new Vector3(0, 1, 0);
+        }
+        if (this.view === "front") {
+          this.camera.position.set(1000, 0, 0);
+          this.camera.up = new Vector3(0, 0, 1);
+        }
+        this.camera.lookAt(0, 0, 0);
+        this.camera.updateProjectionMatrix();
         break;
     }
   }
   // watched properties
   connectedCallback() {
     console.log("connected");
-    this.target = this.mesh;
     this.renderer.setAnimationLoop(this.render.bind(this));
     window.addEventListener("resize", this.resizeListener, false);
     this.addEventListener("pointermove", this.onPointerMoveListener);
@@ -149,14 +169,33 @@ export default class CustomViewer extends HTMLElement {
     this.renderer = null;
   }
   onClickListener = (event) => {
-    console.log(
-      "pointer click",
-      event.altKey,
-      this.pointerMesh,
-      this.pointerMesh?.userData.isFlatHelper,
-      this.pointerMesh?.userData.isTeethHelper
-    );
-    if (this.pointerMesh) {
+    if (!this.model) {
+      return;
+    }
+    if (
+      this.onPointerMoveListener_lastIntersection?.object?.parent ===
+      this.container_2?.userData?.points
+    ) {
+      this.container_2.userData.points.remove(
+        this.onPointerMoveListener_lastIntersection.object
+      );
+    } else if (
+      this.onPointerMoveListener_lastIntersection?.object === this.model
+    ) {
+      const point = this.onPointerMoveListener_lastIntersection.point;
+      this.model.worldToLocal(point);
+      const radius = 1;
+      const indicator = new Mesh(
+        new SphereGeometry(radius),
+        new MeshBasicMaterial({
+          color: 0xaa0000,
+        })
+      );
+      indicator.position.set(point.x, point.y, point.z);
+      indicator.userData.isTeethHelper = true;
+      indicator.userData.confirmed = true;
+      this.container_2.userData.points.add(indicator);
+      return;
       if (this.pointerMesh.userData.isTeethHelper) {
         if (this.pointerMesh.userData.confirmed) {
           if (this.target !== this.pointerMesh) {
@@ -190,105 +229,84 @@ export default class CustomViewer extends HTMLElement {
       }
     }
   };
+
+  onPointerMoveListener_lastIntersection = null;
+  onPointerMoveListener_lastActiveTime = 0;
   onPointerMoveListener = (event) => {
-    // 回收所有未固定的flat点
-    for (const pointer of this.mesh.children) {
-      if (this.pointerMesh === pointer) {
-        continue;
-      }
-      if (!pointer.userData.confirmed) {
-        this.mesh.remove(pointer);
-        pointer["geometry"].dispose();
-        pointer["material"].dispose();
-      }
+    if (!this.model) {
+      return;
     }
+    const lastActiveTime = Date.now();
+    if (lastActiveTime - this.onPointerMoveListener_lastActiveTime < 30) {
+      return;
+    }
+    this.onPointerMoveListener_lastActiveTime = lastActiveTime;
 
     const x = (event.clientX / innerWidth) * 2 - 1;
     const y = -(event.clientY / innerHeight) * 2 + 1;
     this.raycaster.setFromCamera(new Vector2(x, y), this.camera);
-    // 悬停在teeth上
-    // 悬停在mesh上
-    // 设置当前对象
 
-    const intersects = this.raycaster.intersectObject(this.mesh);
-    if (intersects.length) {
-      // intersected point position
-      const object = intersects[0].object as Mesh;
-      const isExistHelper =
-        object.userData.isTeethHelper || object.userData.isFlatHelper;
-      // 当前鼠标悬停是否在teeth点上
-      //  当前鼠标悬停是否在flat点上
-      const isTeethHelper = this.view === "top";
-      const isFlatHelper = this.view === "front";
-      const color = isTeethHelper
-        ? 0xff0000
-        : isFlatHelper
-        ? 0x00ff00
-        : 0xffffff;
-
-      if (isExistHelper) {
-        this.pointerMesh = object as Mesh;
-        return;
-      }
-      const point = new Vector3().copy(intersects[0].point); // point in world
-      this.mesh.worldToLocal(point);
-
-      // 同一牙位,未固定的前置悬停点存在,则仅改变位置,不重新渲染
-      if (this.pointerMesh && !this.pointerMesh.userData.confirmed) {
-        this.pointerMesh.userData.isTeethHelper = isTeethHelper;
-        this.pointerMesh.userData.isFlatHelper = isFlatHelper;
-        const material = this.pointerMesh.material as MeshBasicMaterial;
-        material.color.setHex(color);
-        this.pointerMesh.position.copy(point);
-        return;
-      }
-
-      const radius = this.mesh.userData.maxSize / 20;
-      console.debug("radius", radius);
-
-      const mesh = new Mesh(
-        new SphereGeometry(radius),
-
-        new MeshBasicMaterial({
-          color,
-          wireframe: true,
-        })
-      );
-      mesh.position.set(point.x, point.y, point.z);
-      mesh.userData.radius = radius;
-      mesh.userData.isTeethHelper = isTeethHelper;
-      mesh.userData.isFlatHelper = isFlatHelper;
-      mesh.userData.confirmed = false;
-      this.mesh.add(mesh);
-      this.pointerMesh = mesh;
+    const intersects0 = this.raycaster.intersectObject(
+      this.container_2?.userData.points
+    );
+    if (intersects0.length) {
+      const intersection = intersects0[0];
+      this.onPointerMoveListener_lastIntersection = intersection;
+      this.container_2.remove(this.pointerMesh);
+      this.pointerMesh = undefined;
       return;
     }
 
-    // 不存在悬停点 清空当前悬停点
-    this.pointerMesh = undefined;
+    const intersects = this.raycaster.intersectObject(this.model);
+    if (intersects.length) {
+      const intersection = intersects[0];
+      this.onPointerMoveListener_lastIntersection = intersection;
+      const point = new Vector3().copy(intersection.point);
+      this.model.worldToLocal(point);
+
+      const radius = 1;
+      const indicator =
+        this.pointerMesh ??
+        new Mesh(
+          new SphereGeometry(radius),
+          new MeshBasicMaterial({
+            color,
+          })
+        );
+      indicator.position.set(point.x, point.y, point.z);
+      indicator.userData.radius = radius;
+      indicator.userData.confirmed = false;
+      this.container_2.add(indicator);
+      this.pointerMesh = indicator;
+      return;
+    } else {
+      // 不存在悬停点 清空当前悬停点
+      this.container_2.remove(this.pointerMesh);
+      this.pointerMesh = undefined;
+    }
+    const intersects2 = this.raycaster.intersectObject(this.container_1);
+    if (intersects2.length) {
+      const intersection = intersects2[0];
+      this.onPointerMoveListener_lastIntersection = intersection;
+      return;
+    }
   };
   onkeydownListener = (event) => {
-    console.log(
-      "keydown",
-      event.key,
-      event.ctrlKey,
-      event.altKey,
-      event.metaKey,
-      event.shiftKey
-    );
-
-    if (event.shiftKey) {
-      this.target = this.target === this.mesh ? this.teeth : this.mesh;
+    // if (event.shiftKey) {
+    //   this.target = this.target === this.mesh ? this.teeth : this.mesh;
+    //   return;
+    // }
+    if (event.ctrlKey) {
+      return;
+    }
+    if (!this.model?.userData?.maxSize) {
       return;
     }
 
-    let d = (0.1 * this.mesh.userData.maxSize) / 2;
+    const d = 0.1;
     let x = 0,
       y = 0,
-      z = 0,
-      a = 0,
-      s = 0,
-      h = 0;
+      z = 0;
 
     switch (event.key) {
       case "w":
@@ -303,77 +321,13 @@ export default class CustomViewer extends HTMLElement {
       case "d":
         x = d;
         break;
-      case "q":
-        a = -d;
-        break;
-      case "e":
-        a = d;
-        break;
-      case "r":
-        s = -0.1;
-        break;
-      case "f":
-        s = 0.1;
-        break;
-      case "t":
-        h = d;
-        break;
-      case "g":
-        h = -d;
-        break;
+      default:
+        return;
     }
 
     const matrix = new Matrix4();
     if (x || y || z) matrix.makeTranslation(x, y, z);
-    if (s) {
-      if (this.target.userData.isTeethHelper) {
-        (this.target as Mesh).geometry.dispose();
-        this.target.userData.radius = this.target.userData.radius * (s + 1);
-        (this.target as Mesh).geometry = new SphereGeometry(
-          this.target.userData.radius
-        );
-        return;
-      }
-      matrix.makeScale(s + 1, s + 1, s + 1);
-    }
-    if (a) {
-      console.debug("position", this.target.position);
-      const pos = new Vector3().copy(this.target.position);
-      const translation1 = new Matrix4().makeTranslation(
-        -pos.x,
-        -pos.y,
-        -pos.z
-      );
-      const rotation = new Matrix4().makeRotationZ(a);
-      const translation2 = new Matrix4().makeTranslation(pos.x, pos.y, pos.z);
-      matrix.multiplyMatrices(translation2, rotation).multiply(translation1);
-    }
-    if (h) matrix.makeTranslation(0, 0, h);
-    this.target.applyMatrix4(matrix);
-
-    // matrix only affect x and y axis
-    if (this.target.userData.previousTarget) {
-      const isZOnly =
-        matrix.elements[0] === 0 &&
-        matrix.elements[1] === 0 &&
-        matrix.elements[2] !== 0 &&
-        matrix.elements[3] === 0 &&
-        matrix.elements[4] === 0 &&
-        matrix.elements[5] === 0 &&
-        matrix.elements[6] !== 0 &&
-        matrix.elements[7] === 0 &&
-        matrix.elements[8] === 0 &&
-        matrix.elements[9] === 0 &&
-        matrix.elements[10] !== 0 &&
-        matrix.elements[11] === 0 &&
-        matrix.elements[12] === 0 &&
-        matrix.elements[13] === 0 &&
-        matrix.elements[14] === 0 &&
-        matrix.elements[15] === 1;
-      if (!isZOnly) {
-        // TODO intersect container get z
-      }
-    }
+    this.container_2.applyMatrix4(matrix);
   };
   intersectMeshFromPoint(point: Vector3) {
     const raycaster = new Raycaster();
@@ -419,7 +373,42 @@ export default class CustomViewer extends HTMLElement {
   }
   // wheel event with shift and alt key
   onwheelListener = (event) => {
-    console.log(event.key, event.altKey, event.shiftKey, event.metaKey);
+    switch (this.view) {
+      case "top":
+        if (!this.container_2) {
+          return;
+        }
+        let dY = event.deltaY;
+        console.log(this.onPointerMoveListener_lastIntersection);
+        if (event.altKey) {
+        } else {
+          if (
+            this.onPointerMoveListener_lastIntersection?.object?.parent ===
+            this.container_1
+          ) {
+            let { scale } = this.container_1.userData;
+            if (dY > 0) {
+              scale = 1.02;
+            } else if (dY < 0) {
+              scale = 0.99;
+            }
+            this.container_1.userData.scale = scale;
+            this.container_1.applyMatrix4(
+              new Matrix4().makeScale(scale, scale, scale)
+            );
+          } else {
+            const q = new Quaternion().setFromAxisAngle(
+              new Vector3(0, 0, 1),
+              dY / 1000
+            );
+            this.container_2.applyQuaternion(q);
+          }
+        }
+        break;
+      case "front":
+        break;
+    }
+    return;
     let dY = event.deltaY;
     if (event.shiftKey) {
       dY /= 10;
@@ -442,7 +431,7 @@ export default class CustomViewer extends HTMLElement {
     }
   };
   resizeListener = () => {
-    this.fitCameraView();
+    // this.fitCameraView();
     this.renderer.setSize(innerWidth, innerHeight);
   };
   rotateAroundAxis(dy = 0, axis = new Vector3(0, 1, 0)) {
@@ -450,32 +439,52 @@ export default class CustomViewer extends HTMLElement {
     // v.applyAxisAngle(new Vector3(0, 0, 1), -this.theta);
     const q1 = new Quaternion().setFromAxisAngle(axis, dy);
     this.mesh.applyQuaternion(q1);
+    this.triggerUpdate();
   }
   liftZAndCenterXY(immediate = false) {
     clearTimeout(this.timer);
     this.timer = setTimeout(
       () => {
-        const box = new Box3().setFromObject(this.mesh);
+        const model = this.container_2?.userData?.model;
+        if (!model) return;
+        const box = model.userData.boundingBox;
         const center = box.getCenter(new Vector3());
-        this.mesh.applyMatrix4(
-          new Matrix4().makeTranslation(-center.x, -center.y, -box.min.z)
+        const m = new Matrix4().makeTranslation(
+          -center.x,
+          -center.y,
+          -box.min.z
         );
-        this.fitCameraView();
+        this.container_2.applyMatrix4(m);
       },
       immediate ? 0 : 1000
     );
   }
-  replaceMeshGeometry(geometry: BufferGeometry) {
+  replaceMeshGeometry(geometry: BufferGeometry, matrix?: Matrix4) {
     console.debug("replace geometry", geometry);
 
     if (geometry) {
-      this.mesh.children.forEach((child) => {
-        child["geometry"].dispose();
-      });
-      this.mesh.children = [];
-      this.mesh.geometry.dispose();
-      this.mesh.geometry = geometry as any;
-      this.liftZAndCenterXY(true);
+      this.scene.remove(this.container_2);
+      this.container_2 = new Group();
+      this.scene.add(this.container_2);
+      const model = new Mesh(geometry as any, this.modelMaterial);
+      this.container_2.add(model);
+      const points = new Group();
+      this.container_2.add(points);
+      this.container_2.userData.points = points;
+
+      const boundingBox = new Box3().setFromObject(model);
+      const size = boundingBox.getSize(new Vector3());
+      const maxSize = Math.max(size.x, size.y, size.z) || 5;
+      this.container_2.userData.model = model;
+      model.userData.maxSize = maxSize;
+      model.userData.boundingBox = boundingBox;
+
+      if (!matrix) {
+        this.liftZAndCenterXY(true);
+      } else {
+        this.container_2.applyMatrix4(matrix);
+      }
+      this.resetContainer_1();
     }
   }
   radius = 1;
@@ -485,13 +494,16 @@ export default class CustomViewer extends HTMLElement {
     //   this.extrude.visible = true;
     //   return;
     // }
-    console.debug("switch extrude geometry");
-    const points = this.mesh.children
-      .filter(
+    console.debug(
+      "switch extrude geometry",
+      this.container_2?.userData?.points?.children
+    );
+    const points = this.container_2?.userData?.points?.children
+      ?.filter(
         (child) => child.userData.confirmed && child.userData.isTeethHelper
       )
       .map(
-        (point) => new Vector3().copy(this.mesh.localToWorld(point.position))
+        (point) => point.position.clone()
         // .setZ(this.teeth.position.z)
       );
     // .map((point) => ({
@@ -510,6 +522,7 @@ export default class CustomViewer extends HTMLElement {
       this.extrude.geometry.dispose();
       this.extrude.geometry = geometry as any;
     }
+    this.container_2.add(this.extrude);
     // this.mesh.visible = false;
     // this.extrude.visible = true
   }
@@ -519,47 +532,38 @@ export default class CustomViewer extends HTMLElement {
     this.orbitControl.enablePan = false;
   }
 
-  fitCameraView() {
-    console.debug("camera", this.camera);
-    const boundingBox = new Box3().setFromObject(this.mesh);
-    console.debug("boundingBox", boundingBox);
+  resetContainer_1() {
+    if (!this.model) return;
 
-    const center = boundingBox.getCenter(new Vector3());
-    console.debug("center", center);
-    const size = boundingBox.getSize(new Vector3());
-    console.debug("size", size);
-    const maxSize = Math.max(size.x, size.y, size.z) || 5;
+    this.scene.remove(this.container_1);
+    this.container_1 = new Group();
+    this.container_1.userData.scale = 1;
+    this.scene.add(this.container_1);
 
-    this.mesh.userData.maxSize = maxSize;
+    const size = this.model.userData.boundingBox.getSize(new Vector3());
+    const maxSize = this.model.userData.maxSize;
+    const rate = window.innerWidth / window.innerHeight;
 
-    this.camera.left = -(1.5 * maxSize);
+    this.camera.left = -(1.5 * maxSize * rate);
     this.camera.bottom = -(1.5 * maxSize);
     this.camera.top = 1.5 * maxSize;
-    this.camera.right = 1.5 * maxSize;
-    this.camera.near = -maxSize * 4;
-    this.camera.far = maxSize * 4;
-    if (this.view === "top") {
-      this.camera.position.set(0, 0, maxSize * 2);
-      this.camera.up = new Vector3(0, 1, 0);
-    }
-    if (this.view === "front") {
-      this.camera.position.set(maxSize * 2, 0, 0);
-      this.camera.up = new Vector3(0, 0, 1);
-    }
-    this.camera.lookAt(0, 0, 0);
+    this.camera.right = 1.5 * maxSize * rate;
     this.camera.updateProjectionMatrix();
 
     this.radius = maxSize / 4;
-    // this.teeth.scale.set(1, 1, 1);
-    this.teeth.geometry.dispose();
-    this.teeth.geometry = GeometryLoader.planeWithToothShapes(
+
+    const shapeGeometry = GeometryLoader.planeWithToothShapes(
       size.x / 1.2,
       size.y / 1.2
     );
-    this.teeth.position.setZ(size.z);
-    this.helpGroup.scale.set(size.x * 1.1, size.y * 1.1, size.z * 1.1);
-    this.switchExtrudeGeometry();
-    console.debug("maxSize", maxSize);
+    const shapeMesh = new Mesh(
+      shapeGeometry,
+      new MeshNormalMaterial({
+        side: DoubleSide,
+      })
+    );
+    shapeMesh.position.setZ(0);
+    this.container_1.add(shapeMesh);
   }
   render() {
     // console.log("render");
