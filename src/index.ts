@@ -1,6 +1,6 @@
 import GeometryLoader from "./GeometryLoader";
 import CustomViewer from "./CustomViewer";
-import CustomViewer2 from "./CustomViewer2";
+// import CustomViewer2 from "./CustomViewer2";
 
 customElements.define("custom-viewer", CustomViewer);
 

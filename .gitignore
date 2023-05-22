@@ -1,7 +1,6 @@
 node_modules/
 dist/
+bundle/
 build/
 CMakeFiles/
 CMakeCache.txt
-shell/.vscode/
-!shell/dist

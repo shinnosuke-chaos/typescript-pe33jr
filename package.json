@@ -1,21 +1,37 @@
 {
-  "name": "typescript",
+  "name": "scjb-wrapper",
   "version": "0.0.0",
   "private": true,
   "main": "index.ts",
   "dependencies": {
-    "@types/three": "^0.152.0",
     "three": "^0.152.2"
   },
   "scripts": {
-    "start": "http-server . --cors -o",
-    "watch": "webpack --watch"
+    "start": "electron app/index.js",
+    "watch": "webpack --watch",
+    "build": "webpack",
+    "dist": "electron-builder"
   },
   "devDependencies": {
+    "@types/three": "^0.152.0",
+    "electron": "^24.3.1",
+    "electron-builder": "^23.6.0",
     "http-server": "^14.1.1",
     "ts-loader": "^9.4.2",
     "typescript": "^5.0.4",
     "webpack": "^5.82.1",
     "webpack-cli": "^5.1.1"
+  },
+  "build": {
+    "appId": "cn.sailing3d.scjb",
+    "productName": "Scjb",
+    "directories": {
+      "output": "dist",
+      "app": "app"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "asar": false
   }
 }

@@ -4,5 +4,5 @@
         "raycaster",
         "scjb"
     ],
-    "cmake.sourceDirectory": "${workspaceFolder}/shell"
+    "cmake.sourceDirectory": "${workspaceFolder}/src/intersection"
 }
