@@ -1,57 +1,76 @@
-// Calculate the Euclidean distance between two points
-function distance(p1, p2) {
-  const dx = p1.x - p2.x;
-  const dy = p1.y - p2.y;
-  const dz = p1.z - p2.z;
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+interface Point {
+  x: number;
+  y: number;
+  z?: number;
 }
 
-// Generate all permutations of the array elements
-function permute(arr) {
-  const result = [];
+function calculateDistance(p1: Point, p2: Point): number {
+  const dx = p1.x - p2.x;
+  const dy = p1.y - p2.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
-  function swap(a, b) {
-    const temp = arr[a];
-    arr[a] = arr[b];
-    arr[b] = temp;
+export function findShortestPath(points: Point[]): {
+  distance: number;
+  path: Point[];
+} {
+  const n = points.length;
+  const dp: number[][] = [];
+  const prev: number[][] = [];
+
+  for (let i = 0; i < n; i++) {
+    dp[i] = [];
+    prev[i] = [];
+    for (let j = 0; j < 1 << n; j++) {
+      dp[i][j] = Infinity;
+      prev[i][j] = -1;
+    }
   }
 
-  function generate(n, heapArr) {
-    if (n === 1) {
-      result.push([...heapArr]);
-      return;
-    }
+  for (let i = 0; i < n; i++) {
+    dp[i][1 << i] = 0;
+  }
 
+  for (let mask = 1; mask < 1 << n; mask++) {
     for (let i = 0; i < n; i++) {
-      generate(n - 1, heapArr);
-      if (n % 2 === 0) {
-        swap(i, n - 1);
-      } else {
-        swap(0, n - 1);
+      if ((mask & (1 << i)) === 0) continue;
+
+      for (let j = 0; j < n; j++) {
+        if (i === j || (mask & (1 << j)) !== 0) continue;
+
+        const prevMask = mask | (1 << j);
+        const distance = calculateDistance(points[i], points[j]);
+        if (dp[i][mask] + distance < dp[j][prevMask]) {
+          dp[j][prevMask] = dp[i][mask] + distance;
+          prev[j][prevMask] = i;
+        }
       }
     }
   }
 
-  generate(arr.length, [...arr]);
-  return result;
-}
-
-// Find the shortest path
-export function findShortestPath(points) {
-  const permutations = permute(points);
-  let shortestDistance = Infinity;
-  let shortestPath = [];
-
-  for (const permutation of permutations) {
-    let totalDistance = 0;
-    for (let i = 0; i < permutation.length - 1; i++) {
-      totalDistance += distance(permutation[i], permutation[i + 1]);
-    }
-    if (totalDistance < shortestDistance) {
-      shortestDistance = totalDistance;
-      shortestPath = permutation;
+  let minDistance = Infinity;
+  let last = -1;
+  for (let i = 0; i < n; i++) {
+    const distance = dp[i][(1 << n) - 1];
+    if (distance < minDistance) {
+      minDistance = distance;
+      last = i;
     }
   }
 
-  return shortestPath;
+  const path = [];
+  let mask = (1 << n) - 1;
+  let current = last;
+  while (current !== -1) {
+    const prevMask = mask ^ (1 << current);
+    path.push(current);
+    const next = prev[current][mask];
+    mask = prevMask;
+    current = next;
+  }
+
+  return {
+    distance: minDistance,
+    path: path.reverse().map((i) => points[i]),
+  };
 }

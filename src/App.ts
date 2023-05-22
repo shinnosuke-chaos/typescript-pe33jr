@@ -51,19 +51,15 @@ export class App extends HTMLElement {
     return this.querySelector("custom-viewer");
   }
   persistState() {
-    if (this.viewer.mesh.geometry.userData.filePath) {
-      console.debug("123123");
-      // debugger
-      this.state.modelFile = this.viewer.mesh.geometry.userData.filePath;
-      this.state.modelMatrix = this.viewer.mesh.matrix.toArray();
-      console.log(this.state.modelMatrix);
+    if (this.viewer.model.geometry.userData.filePath) {
+      this.state.modelFile = this.viewer.model.geometry.userData.filePath;
+      this.state.modelMatrix = this.viewer.model.matrix.toArray();
     }
     localStorage.setItem("__persist_state__", JSON.stringify(this.state));
   }
   async restoreState() {
     const json = localStorage.getItem("__persist_state__");
     const state = JSON.parse(json);
-    console.log(json);
     if (state?.modelFile) {
       this.state = state;
       const stlLoader = new STLLoader();

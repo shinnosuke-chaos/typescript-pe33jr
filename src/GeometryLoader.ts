@@ -114,46 +114,66 @@ export default class GeometryLoader {
   // extrude geometry with points
   static extrudeGeometryWithPoints(
     points: Vector3[],
-    len = 1
-  ): ExtrudeGeometry {
-    // sort points to a line
-    // points.sort((a, b) => {
-    //   return a.x - b.x;
-    // });
+    len = 1,
+    type
+  ): ExtrudeGeometry[] {
+    const sortedPoints = findShortestPath(points).path.map(
+      (p) => new Vector3(p.x, p.y, p.z - len / 6)
+    );
 
-    const sortedPoints = findShortestPath(points).map((p) => ({
-      ...p,
-      z: p.z - 7,
-    }));
-
-    return new ExtrudeGeometry(GeometryLoader.createHouseShape(len), {
-      steps: 20,
-      depth: 16,
-      bevelEnabled: false,
-      bevelThickness: 1,
-      bevelSize: 1,
-      bevelOffset: 0,
-      bevelSegments: 1,
-      extrudePath: new CatmullRomCurve3(sortedPoints, false, "catmullrom", 0.5),
-    });
+    return GeometryLoader.createHouseShape(len, type).map(
+      (shape) =>
+        new ExtrudeGeometry(shape, {
+          steps: 20,
+          depth: 16,
+          bevelEnabled: false,
+          bevelThickness: 1,
+          bevelSize: 1,
+          bevelOffset: 0,
+          bevelSegments: 1,
+          extrudePath: new CatmullRomCurve3(
+            sortedPoints,
+            false,
+            "catmullrom",
+            0.5
+          ),
+        })
+    );
   }
 
-  static createHouseShape(len = 1) {
-    var shape = new Shape();
-    // shape.moveTo(0, 0);
-    // shape.lineTo(len, 0);
-    // shape.absarc(0, 0, len, Math.PI * 0.5, Math.PI * 1.5, true);
-    // shape.lineTo(len, len * 2);
-    // shape.moveTo(0, 0);
-    shape.arc(0, 0, len / 2, 0, Math.PI * 2, true);
-    // shape.arc(0, 0, len / 2, Math.PI * 1.5, Math.PI * 0.5, true);
-    // shape.lineTo(0, len/2);
-    // shape.lineTo(0, -len);
-    // shape.lineTo(0, 0);
-    // shape.lineTo(-len, len / 2);
-    // // shape.lineTo(-len, len / 2);
-    // shape.lineTo(0, 0);
+  static createHouseShape(len = 1, type = 0) {
+    if (type == 0) {
+      const shape = new Shape();
+      shape.moveTo(-len, -len);
+      shape.lineTo(len, -len);
+      shape.lineTo(len, 0);
+      shape.lineTo(-len, 0);
+      shape.lineTo(-len, -len);
 
-    return shape;
+      const shape2 = new Shape();
+      shape2.moveTo(-len, 0.1);
+      shape2.lineTo(len, 0.1);
+      shape2.lineTo(len, len);
+      shape2.lineTo(-len, len);
+      shape2.lineTo(-len, 0.1);
+
+      return [shape, shape2];
+    } else {
+      const shape = new Shape();
+      shape.moveTo(-len, -len);
+      shape.lineTo(0, -len);
+      shape.lineTo(0, len);
+      shape.lineTo(-len, len);
+      shape.lineTo(-len, -len);
+
+      const shape2 = new Shape();
+      shape2.moveTo(0.1, -len);
+      shape2.lineTo(len, -len);
+      shape2.lineTo(len, len);
+      shape2.lineTo(0.1, len);
+      shape2.lineTo(0.1, -len);
+
+      return [shape, shape2];
+    }
   }
 }

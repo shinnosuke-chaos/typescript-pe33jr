@@ -42,6 +42,10 @@ export default class CustomViewer extends HTMLElement {
     return this.container_2?.userData?.model;
   }
 
+  radius: number;
+
+  extrude_type = 0;
+
   state: State;
   view: "top" | "front" = "front";
   scene = new Scene();
@@ -73,7 +77,6 @@ export default class CustomViewer extends HTMLElement {
   modelMaterial = new MeshNormalMaterial();
   mesh: Mesh;
 
-  extrude = new Mesh(new BufferGeometry(), this.modelMaterial);
   // others
   pointerMesh: Mesh;
   raycaster: Raycaster = new Raycaster();
@@ -471,6 +474,9 @@ export default class CustomViewer extends HTMLElement {
       const points = new Group();
       this.container_2.add(points);
       this.container_2.userData.points = points;
+      const extrude = new Group();
+      this.container_2.add(extrude);
+      this.container_2.userData.extrude = extrude;
 
       const boundingBox = new Box3().setFromObject(model);
       const size = boundingBox.getSize(new Vector3());
@@ -485,9 +491,9 @@ export default class CustomViewer extends HTMLElement {
         this.container_2.applyMatrix4(matrix);
       }
       this.resetContainer_1();
+      this.triggerUpdate();
     }
   }
-  radius: number;
   switchExtrudeGeometry() {
     // if (!this.mesh.visible) {
     //   this.mesh.visible = true;
@@ -513,16 +519,17 @@ export default class CustomViewer extends HTMLElement {
     //   a: point.userData.radius,
     // }));
     if (!points.length) return;
-    const geometry = GeometryLoader.extrudeGeometryWithPoints(
+    const geometries = GeometryLoader.extrudeGeometryWithPoints(
       points,
-      this.radius
+      this.radius,
+      (this.extrude_type = this.extrude_type ? 0 : 1)
     );
-
-    if (geometry) {
-      this.extrude.geometry.dispose();
-      this.extrude.geometry = geometry as any;
-    }
-    this.container_2.add(this.extrude);
+    this.container_2.userData.extrude.children.length = 0;
+    geometries
+      .map((g) => new Mesh(g, this.modelMaterial))
+      .forEach((m) => {
+        this.container_2.userData.extrude.add(m);
+      });
     // this.mesh.visible = false;
     // this.extrude.visible = true
   }
@@ -550,7 +557,7 @@ export default class CustomViewer extends HTMLElement {
     this.camera.right = 1.5 * maxSize * rate;
     this.camera.updateProjectionMatrix();
 
-    this.radius = maxSize / 2.75;
+    this.radius = Math.max(maxSize / 4, 10);
 
     const shapeGeometry = GeometryLoader.planeWithToothShapes(
       size.x / 1.2,
