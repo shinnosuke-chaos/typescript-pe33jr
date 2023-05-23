@@ -1,8 +1,10 @@
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
 import CustomViewer from "./CustomViewer";
 import GeometryLoader from "./GeometryLoader";
-import { State } from "./Types";
+import { State, SCJB } from "./Types";
 import { Matrix4 } from "three";
+
+declare const scjb: SCJB;
 
 export class App extends HTMLElement {
   state: State = {};
@@ -46,6 +48,9 @@ export class App extends HTMLElement {
     "switch-extrude": () => {
       this.viewer.switchExtrudeGeometry();
     },
+    "exec-intersect": () => {
+      this.execIntersect();
+    },
   };
   get viewer(): CustomViewer {
     return this.querySelector("custom-viewer");
@@ -80,5 +85,31 @@ export class App extends HTMLElement {
           break;
       }
     }
+  }
+  execIntersect() {
+    const contents = this.viewer.exportModelAndExtrude();
+    console.debug(contents);
+
+    if (contents?.length !== 3) return;
+    const [part0, part1, part1_result, part2, part2_result] =
+      scjb.tmpFilePath();
+    return Promise.all([
+      scjb.writeContentFile(contents[0], part0),
+      scjb.writeContentFile(contents[1], part1),
+      scjb.writeContentFile(contents[2], part2),
+    ])
+      .then(() => {
+        return scjb.intersect(part0, part1, part1_result, part2, part2_result);
+      })
+      .then((resultPaths: string[]) => {
+        console.log(resultPaths);
+        // TODO render result from path
+        return Promise.all(
+          [part0, part1, part2].map((path) => scjb.unlinkContentFile(path))
+        );
+      })
+      .then(() => {
+        console.log("Done");
+      });
   }
 }

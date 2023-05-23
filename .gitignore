@@ -4,3 +4,4 @@ bundle/
 build/
 CMakeFiles/
 CMakeCache.txt
+venv/

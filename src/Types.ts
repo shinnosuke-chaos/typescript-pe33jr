@@ -1,3 +1,5 @@
+import * as NodeAPI from "./node-api";
+
 export interface ExtrudePoint {
   x: number;
   y: number;
@@ -16,3 +18,5 @@ export class State {
   refModelMatrix?: number[];
   extrudePoints?: ExtrudePoint[];
 }
+
+export type SCJB = typeof NodeAPI;

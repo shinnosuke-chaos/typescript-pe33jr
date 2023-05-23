@@ -25,7 +25,7 @@ export default class GeometryLoader {
         if (!file) return;
         GeometryLoader.readFileToGeometry(file)
           .then((geometry) => {
-            geometry.userData.filePath = file.path;
+            geometry.userData.filePath = file['path'];
             resolve(geometry);
           })
           .catch(reject);

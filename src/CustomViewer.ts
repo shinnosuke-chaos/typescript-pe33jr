@@ -27,6 +27,8 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
+import { STLExporter } from "three/examples/jsm/exporters/STLExporter";
+
 import GeometryLoader from "./GeometryLoader";
 import { State } from "./Types";
 
@@ -460,6 +462,15 @@ export default class CustomViewer extends HTMLElement {
         this.container_2.applyMatrix4(m);
       },
       immediate ? 0 : 1000
+    );
+  }
+  exportModelAndExtrude(): string[] {
+    console.log("export model");
+    const model = this.container_2?.userData?.model;
+    const extrude = this.container_2?.userData?.extrude;
+    if (!model || !extrude) return;
+    return [model, ...extrude.children].map(
+      (obj) => obj && new STLExporter().parse(obj)
     );
   }
   replaceMeshGeometry(geometry: BufferGeometry, matrix?: Matrix4) {
