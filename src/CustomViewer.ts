@@ -25,12 +25,13 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { TrackballControls } from "three/examples/jsm/controls/TrackballControls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import { STLExporter } from "three/examples/jsm/exporters/STLExporter";
 
 import GeometryLoader from "./GeometryLoader";
 import { State } from "./Types";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
 const color = 0xffffff;
 const emissive = 0xff0000;
@@ -58,7 +59,7 @@ export default class CustomViewer extends HTMLElement {
     this.camera,
     this.renderer.domElement
   );
-  orbitControl: OrbitControls = new OrbitControls(
+  cameraControl: OrbitControls = new OrbitControls(
     this.camera,
     this.renderer.domElement
   );
@@ -83,22 +84,7 @@ export default class CustomViewer extends HTMLElement {
   pointerMesh: Mesh;
   raycaster: Raycaster = new Raycaster();
   timer;
-  private _target: Object3D = null;
-  public get target(): Object3D {
-    return this._target;
-  }
-  public set target(value: Object3D) {
-    this.focusTarget(false);
-    this._target = value;
-    this.focusTarget(true);
-  }
-  focusTarget(focus: boolean) {
-    this.target?.traverse((child) => {
-      if (child instanceof Mesh) {
-        // child.material.metalness = focus ? 0.8 : 0.2;
-      }
-    });
-  }
+  target: Object3D = null;
 
   constructor() {
     super();
@@ -109,8 +95,6 @@ export default class CustomViewer extends HTMLElement {
     this.container_helper = new Group();
 
     this.container_helper.add(this.axisHelper);
-
-    this.updateOrbitControl();
 
     this.scene.background = new Color(0xf0f0f0);
     this.scene.add(this.camera, this.control, this.container_helper);
@@ -145,11 +129,14 @@ export default class CustomViewer extends HTMLElement {
   // watched properties
   connectedCallback() {
     console.log("connected");
+    this.updateControl();
+
     this.renderer.setAnimationLoop(this.render.bind(this));
     window.addEventListener("resize", this.resizeListener, false);
     this.addEventListener("pointermove", this.onPointerMoveListener);
     this.addEventListener("click", this.onClickListener);
     document.addEventListener("keydown", this.onkeydownListener);
+    document.addEventListener("keyup", this.onKeyupListener);
     document.addEventListener("wheel", this.onwheelListener);
     this.liftZAndCenterXY(true);
   }
@@ -168,12 +155,18 @@ export default class CustomViewer extends HTMLElement {
     this.removeEventListener("click", this.onClickListener);
     window.removeEventListener("resize", this.resizeListener);
     document.removeEventListener("keydown", this.onkeydownListener);
+    document.removeEventListener("keyup", this.onKeyupListener);
     document.removeEventListener("wheel", this.onwheelListener);
     this.renderer.domElement;
     this.renderer.dispose();
     this.renderer = null;
+    this.cameraControl.dispose();
+    this.control.dispose();
   }
   onClickListener = (event) => {
+    if (!event.ctrlKey) {
+      return;
+    }
     if (!this.model) {
       return;
     }
@@ -238,6 +231,11 @@ export default class CustomViewer extends HTMLElement {
   onPointerMoveListener_lastIntersection = null;
   onPointerMoveListener_lastActiveTime = 0;
   onPointerMoveListener = (event) => {
+    if (!event.ctrlKey) {
+      this.container_2?.remove(this.pointerMesh);
+      this.pointerMesh = undefined;
+      return;
+    }
     if (!this.model) {
       return;
     }
@@ -257,7 +255,7 @@ export default class CustomViewer extends HTMLElement {
     if (intersects0.length) {
       const intersection = intersects0[0];
       this.onPointerMoveListener_lastIntersection = intersection;
-      this.container_2.remove(this.pointerMesh);
+      this.container_2?.remove(this.pointerMesh);
       this.pointerMesh = undefined;
       return;
     }
@@ -296,12 +294,18 @@ export default class CustomViewer extends HTMLElement {
       return;
     }
   };
+  onKeyupListener = (event) => {
+    if (event.key === "Control") {
+      this.cameraControl.enabled = true;
+    }
+  };
   onkeydownListener = (event) => {
     // if (event.shiftKey) {
     //   this.target = this.target === this.mesh ? this.teeth : this.mesh;
     //   return;
     // }
-    if (event.ctrlKey) {
+    if (event.key === "Control") {
+      this.cameraControl.enabled = false;
       return;
     }
     if (!this.model?.userData?.maxSize) {
@@ -378,6 +382,9 @@ export default class CustomViewer extends HTMLElement {
   }
   // wheel event with shift and alt key
   onwheelListener = (event) => {
+    if (!this.control.enabled) {
+      return;
+    }
     switch (this.view) {
       case "top":
         if (!this.container_2) {
@@ -443,7 +450,7 @@ export default class CustomViewer extends HTMLElement {
     // const v = new Vector3(0, 1, 0);
     // v.applyAxisAngle(new Vector3(0, 0, 1), -this.theta);
     const q1 = new Quaternion().setFromAxisAngle(axis, dy);
-    this.mesh.applyQuaternion(q1);
+    this.container_2.userData.model?.applyQuaternion(q1);
     this.triggerUpdate();
   }
   liftZAndCenterXY(immediate = false) {
@@ -533,7 +540,7 @@ export default class CustomViewer extends HTMLElement {
     const geometries = GeometryLoader.extrudeGeometryWithPoints(
       points,
       this.radius,
-      (this.extrude_type = this.extrude_type ? 0 : 1)
+      ++this.extrude_type
     );
     this.container_2.userData.extrude.children.length = 0;
     geometries
@@ -544,10 +551,13 @@ export default class CustomViewer extends HTMLElement {
     // this.mesh.visible = false;
     // this.extrude.visible = true
   }
-  updateOrbitControl() {
+  updateControl() {
+    this.control.enabled = false;
+    this.cameraControl.enabled = true;
+    // this.trackBallControl.noRotate = true;
     // only dragging is enabled
-    this.orbitControl.enableZoom = false;
-    this.orbitControl.enablePan = false;
+    this.cameraControl.enablePan = false;
+    this.cameraControl.enableZoom = false;
   }
 
   resetContainer_1() {
@@ -570,21 +580,25 @@ export default class CustomViewer extends HTMLElement {
 
     this.radius = Math.max(maxSize / 4, 10);
 
-    const shapeGeometry = GeometryLoader.planeWithToothShapes(
-      size.x / 1.2,
-      size.y / 1.2
-    );
-    const shapeMesh = new Mesh(
-      shapeGeometry,
-      new MeshNormalMaterial({
-        side: DoubleSide,
-      })
-    );
-    shapeMesh.position.setZ(0);
-    this.container_1.add(shapeMesh);
+    if (this.control.enabled) {
+      // no shape mesh when cons
+      const shapeGeometry = GeometryLoader.planeWithToothShapes(
+        size.x / 1.2,
+        size.y / 1.2
+      );
+      const shapeMesh = new Mesh(
+        shapeGeometry,
+        new MeshNormalMaterial({
+          side: DoubleSide,
+        })
+      );
+      shapeMesh.position.setZ(0);
+      this.container_1.add(shapeMesh);
+    }
   }
   render() {
     // console.log("render");
+    this.cameraControl.update();
     this.renderer.render(this.scene, this.camera);
   }
 }

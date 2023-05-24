@@ -88,11 +88,12 @@ export class App extends HTMLElement {
   }
   execIntersect() {
     const contents = this.viewer.exportModelAndExtrude();
-    console.debug(contents);
 
     if (contents?.length !== 3) return;
-    const [part0, part1, part1_result, part2, part2_result] =
-      scjb.tmpFilePath();
+    const [part0, part1, part2] = scjb.tmpFilePath();
+    const [part1_result, part2_result] = scjb.resultFilePath(
+      this.state.modelFile
+    );
     return Promise.all([
       scjb.writeContentFile(contents[0], part0),
       scjb.writeContentFile(contents[1], part1),
@@ -109,7 +110,7 @@ export class App extends HTMLElement {
         );
       })
       .then(() => {
-        console.log("Done");
+        alert("Done! See " + part1_result + " and " + part2_result);
       });
   }
 }

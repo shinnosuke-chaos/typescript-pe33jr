@@ -3,9 +3,11 @@ import {
   BufferGeometry,
   CatmullRomCurve3,
   ExtrudeGeometry,
+  Matrix3,
   Shape,
   ShapeGeometry,
   ShapePath,
+  Vector2,
   Vector3,
 } from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
@@ -25,7 +27,7 @@ export default class GeometryLoader {
         if (!file) return;
         GeometryLoader.readFileToGeometry(file)
           .then((geometry) => {
-            geometry.userData.filePath = file['path'];
+            geometry.userData.filePath = file["path"];
             resolve(geometry);
           })
           .catch(reject);
@@ -142,38 +144,33 @@ export default class GeometryLoader {
   }
 
   static createHouseShape(len = 1, type = 0) {
-    if (type == 0) {
-      const shape = new Shape();
-      shape.moveTo(-len, -len);
-      shape.lineTo(len, -len);
-      shape.lineTo(len, 0);
-      shape.lineTo(-len, 0);
-      shape.lineTo(-len, -len);
+    const rotation = new Matrix3().makeRotation((Math.PI / 2) * (type % 4));
+    const shape1 = new Shape();
+    shape1.moveTo(-len, 0.1);
+    shape1.lineTo(len, 0.1);
+    shape1.lineTo(len, len / 2);
+    shape1.lineTo(-len / 2, len / 2);
+    shape1.arc(
+      0,
+      -len / 2 + 0.1,
+      len / 2 - 0.1,
+      Math.PI * 0.5,
+      Math.PI * 1,
+      false
+    );
 
-      const shape2 = new Shape();
-      shape2.moveTo(-len, 0.1);
-      shape2.lineTo(len, 0.1);
-      shape2.lineTo(len, len);
-      shape2.lineTo(-len, len);
-      shape2.lineTo(-len, 0.1);
+    const shape2 = new Shape();
+    shape2.moveTo(-len / 2, -0.1);
+    shape2.arc(0, 0, len / 2 - 0.1, Math.PI * 1, Math.PI * 1.5, false);
+    shape2.lineTo(len, -len / 2);
+    shape2.lineTo(len, -0.1);
 
-      return [shape, shape2];
-    } else {
-      const shape = new Shape();
-      shape.moveTo(-len, -len);
-      shape.lineTo(0, -len);
-      shape.lineTo(0, len);
-      shape.lineTo(-len, len);
-      shape.lineTo(-len, -len);
-
-      const shape2 = new Shape();
-      shape2.moveTo(0.1, -len);
-      shape2.lineTo(len, -len);
-      shape2.lineTo(len, len);
-      shape2.lineTo(0.1, len);
-      shape2.lineTo(0.1, -len);
-
-      return [shape, shape2];
-    }
+    return [shape1, shape2].map((shape) => {
+      return new Shape(
+        shape
+          .getPoints()
+          .map((p) => new Vector2(p.x, p.y).applyMatrix3(rotation))
+      );
+    });
   }
 }
