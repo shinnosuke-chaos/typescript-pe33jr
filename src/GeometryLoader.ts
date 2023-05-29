@@ -117,13 +117,32 @@ export default class GeometryLoader {
   static extrudeGeometryWithPoints(
     points: Vector3[],
     len = 1,
+    xScale = 1,
+    yScale = 1,
+    translate = 0,
     type
   ): ExtrudeGeometry[] {
+    console.debug(
+      "extrudeGeometryWithPoints",
+      points,
+      len,
+      xScale,
+      yScale,
+      translate,
+      type
+    );
+
     const sortedPoints = findShortestPath(points).path.map(
       (p) => new Vector3(p.x, p.y, p.z - len / 6)
     );
 
-    return GeometryLoader.createHouseShape(len, type).map(
+    return GeometryLoader.createHouseShape(
+      len,
+      xScale,
+      yScale,
+      translate,
+      type
+    ).map(
       (shape) =>
         new ExtrudeGeometry(shape, {
           steps: 20,
@@ -143,8 +162,17 @@ export default class GeometryLoader {
     );
   }
 
-  static createHouseShape(len = 1, type = 0) {
-    const rotation = new Matrix3().makeRotation((Math.PI / 2) * (type % 4));
+  static createHouseShape(
+    len = 1,
+    xScale = 1,
+    yScale = 1,
+    translate = 0,
+    type = 0
+  ) {
+    const rotation = new Matrix3()
+      .makeRotation((Math.PI / 2) * (type % 4))
+      .multiply(new Matrix3().makeScale(xScale, yScale))
+      .multiply(new Matrix3().makeTranslation(translate, 0));
     const shape1 = new Shape();
     shape1.moveTo(-len, 0.1);
     shape1.lineTo(len, 0.1);

@@ -46,6 +46,9 @@ export default class CustomViewer extends HTMLElement {
   }
 
   radius: number;
+  xScale: number = 1;
+  yScale: number = 1;
+  zTranslate: number = 0;
 
   extrude_type = 0;
 
@@ -512,7 +515,9 @@ export default class CustomViewer extends HTMLElement {
       this.triggerUpdate();
     }
   }
-  switchExtrudeGeometry() {
+  switchExtrudeGeometry(rotate: boolean = true) {
+    console.debug("switch extrude geometry", rotate);
+    debugger;
     // if (!this.mesh.visible) {
     //   this.mesh.visible = true;
     //   this.extrude.visible = true;
@@ -540,7 +545,10 @@ export default class CustomViewer extends HTMLElement {
     const geometries = GeometryLoader.extrudeGeometryWithPoints(
       points,
       this.radius,
-      ++this.extrude_type
+      this.xScale,
+      this.yScale,
+      this.zTranslate,
+      rotate ? ++this.extrude_type : this.extrude_type
     );
     this.container_2.userData.extrude.children.length = 0;
     geometries
@@ -579,6 +587,7 @@ export default class CustomViewer extends HTMLElement {
     this.camera.updateProjectionMatrix();
 
     this.radius = Math.max(maxSize / 4, 10);
+    this.container_helper.scale.set(size.x, size.y, size.z);
 
     if (this.control.enabled) {
       // no shape mesh when cons

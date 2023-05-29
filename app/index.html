@@ -10,12 +10,15 @@
   <body>
     <my-app>
       <tool-bar>
-        <h1>TypeScript Starter</h1>
-        <button data-action="switch-view">Switch View</button>
-        <button data-action="load-stl">Load STL</button>
-        <button data-action="upside-down">Upside Down</button>
-        <button data-action="switch-extrude">Switch Extrude</button>
-        <button data-action="exec-intersect">Exec Intersect</button>
+        <h1>SCJB</h1>
+        <button data-action="switch-view" title="切换俯视和正视角">Switch View</button>
+        <button data-action="load-stl"title="加载STL文件">Load STL</button>
+        <button data-action="upside-down" title="上下翻转180°">Upside Down</button>
+        <button data-action="switch-extrude" title="生成夹板模型,或切换方向.(首先按住Ctrl点击牙位)">Switch Extrude</button>
+        <button data-action="exec-intersect" title="导出结果,与加载的STL求交,结果保存到同文件夹 同名_scjb_1/2.stl">Exec Intersect</button>
+        X:<input name="xScale" value="1" max="2" step="0.1" min="0.3" type="number" title="X缩放">
+        Y:<input name="yScale" value="1" max="2" step="0.1" min="0.3" type="number" title="Y缩放">
+        Z:<input name="zTranslate" value="0" max="5" step="0.5" min="-5" type="number" title="偏移">
       </tool-bar>
       <custom-viewer view="top"></custom-viewer>
     </my-app>

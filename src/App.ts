@@ -20,6 +20,13 @@ export class App extends HTMLElement {
         this.clickListeners[target.dataset.action]();
       }
     });
+    Array.from(this.querySelectorAll("input[name]")).forEach((input) =>
+      input.addEventListener("change", (event: Event) => {
+        this.viewer[input.getAttribute("name")] =
+          +(event.target as HTMLInputElement).value || 1;
+        this.viewer.switchExtrudeGeometry(false);
+      })
+    );
   }
   connectedCallback() {
     this.viewer.addEventListener("update", () => {
